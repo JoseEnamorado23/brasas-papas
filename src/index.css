@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: theme('colors.paper');
+  color: theme('colors.ink');
+  font-family: theme('fontFamily.sans');
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Alinea las cifras en las columnas de débito y crédito del libro. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes aparecer {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Único movimiento no disparado por hover: el asiento recién contabilizado. */
+@media (prefers-reduced-motion: no-preference) {
+  .aparecer {
+    animation: aparecer 0.24s ease-out;
+  }
+}
