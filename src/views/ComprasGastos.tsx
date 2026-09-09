@@ -108,7 +108,7 @@ export function ComprasGastos() {
                 placeholder="Carne, pan y vegetales"
               />
             </Campo>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Campo etiqueta="Monto">
                 <Entrada
                   type="number"
@@ -128,7 +128,7 @@ export function ComprasGastos() {
                 </Selector>
               </Campo>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {destino === 'Gasto' && (
                 <Campo etiqueta="Categoría de gasto">
                   <Selector
@@ -185,7 +185,7 @@ export function ComprasGastos() {
                 placeholder="Energía, agua e internet"
               />
             </Campo>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Campo etiqueta="Monto">
                 <Entrada
                   type="number"

@@ -151,7 +151,7 @@ function FormularioPedido() {
     <Panel titulo="Nuevo pedido a domicilio">
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="grid gap-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Campo etiqueta="Cliente">
               <Entrada value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="María Gómez" />
             </Campo>
@@ -162,7 +162,7 @@ function FormularioPedido() {
           <Campo etiqueta="Dirección">
             <Entrada value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder="Calle 12 # 5 - 20, apto 302" />
           </Campo>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Campo etiqueta="Zona">
               <Selector value={zona} onChange={(e) => cambiarZona(e.target.value as ZonaDomicilio)}>
                 {ZONAS_DOMICILIO.map((z) => (
@@ -181,7 +181,7 @@ function FormularioPedido() {
               />
             </Campo>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Campo etiqueta="Canal">
               <Selector value={canal} onChange={(e) => setCanal(e.target.value as CanalDomicilio)}>
                 <option value="Propio">Domiciliario propio</option>

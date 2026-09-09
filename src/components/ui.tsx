@@ -85,9 +85,16 @@ export function Kpi({
   const color =
     tono === 'ingreso' ? 'text-balance' : tono === 'egreso' ? 'text-ember' : 'text-ink';
   return (
-    <div className="bg-surface p-4">
+    <div className="bg-surface p-3 sm:p-4">
       <p className="text-xs text-muted">{etiqueta}</p>
-      <p className={['mt-1.5 font-mono text-lg font-semibold tabular', color].join(' ')}>{valor}</p>
+      <p
+        className={[
+          'mt-1.5 break-words font-mono text-base font-semibold tabular sm:text-lg',
+          color,
+        ].join(' ')}
+      >
+        {valor}
+      </p>
       {nota && <p className="mt-1 text-[11px] text-muted">{nota}</p>}
     </div>
   );

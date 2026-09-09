@@ -47,7 +47,7 @@ export function Dashboard() {
           </p>
           <p
             className={[
-              'mt-2 font-mono text-[2.4rem] font-semibold leading-none tabular',
+              'mt-2 break-words font-mono text-3xl font-semibold leading-none tabular sm:text-[2.4rem]',
               utilidadPositiva ? 'text-ink' : 'text-ember',
             ].join(' ')}
           >
