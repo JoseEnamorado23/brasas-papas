@@ -6,12 +6,14 @@ import type {
   DestinoCompra,
   Domiciliario,
   EstadoApp,
+  EstadoReserva,
   Empleado,
   FormaPago,
   FormaPagoCompra,
   FormaPagoDomicilio,
   Producto,
   ZonaDomicilio,
+  ZonaSalon,
 } from '../types';
 import { construirEstadoInicial } from '../data/seed';
 import {
@@ -24,6 +26,16 @@ import {
   aplicarNuevoPedido,
   aplicarVenta,
 } from '../lib/operaciones';
+import {
+  aplicarAbrirMesa,
+  aplicarCerrarMesa,
+  aplicarConsumo,
+  aplicarEstadoReserva,
+  aplicarLimpiarMesa,
+  aplicarNuevaReserva,
+  aplicarQuitarConsumo,
+  aplicarSentarReserva,
+} from '../lib/salon';
 
 export type Accion =
   | { tipo: 'VENTA'; lineas: { productoId: string; cantidad: number }[]; formaPago: FormaPago }
@@ -70,6 +82,34 @@ export type Accion =
   | { tipo: 'CANCELAR_PEDIDO'; pedidoId: string }
   | { tipo: 'LIQUIDAR_PLATAFORMA'; plataformaId: string }
   | { tipo: 'NUEVO_DOMICILIARIO'; nombre: string; telefono: string; tarifaEntrega: number }
+  | {
+      tipo: 'NUEVA_RESERVA';
+      fecha: string;
+      hora: string;
+      cliente: string;
+      telefono: string;
+      personas: number;
+      zona?: ZonaSalon;
+      mesaId?: string;
+      notas?: string;
+    }
+  | {
+      tipo: 'ESTADO_RESERVA';
+      reservaId: string;
+      estado: Extract<EstadoReserva, 'Pendiente' | 'Confirmada' | 'No-show' | 'Cancelada'>;
+    }
+  | {
+      tipo: 'SENTAR_RESERVA';
+      reservaId: string;
+      mesaId: string;
+      comensales: number;
+      mesero: string;
+    }
+  | { tipo: 'ABRIR_MESA'; mesaId: string; comensales: number; mesero: string }
+  | { tipo: 'CONSUMO_MESA'; sesionId: string; productoId: string; delta: number }
+  | { tipo: 'QUITAR_CONSUMO'; sesionId: string; productoId: string }
+  | { tipo: 'CERRAR_MESA'; sesionId: string }
+  | { tipo: 'LIMPIAR_MESA'; mesaId: string }
   | { tipo: 'REINICIAR' };
 
 const EMOJI_POR_CATEGORIA: Record<CategoriaProducto, string> = {
@@ -153,6 +193,48 @@ function reductor(estado: EstadoApp, accion: Accion): EstadoApp {
       };
       return { ...estado, domiciliarios: [...estado.domiciliarios, nuevo] };
     }
+
+    case 'NUEVA_RESERVA':
+      return aplicarNuevaReserva(estado, {
+        fecha: accion.fecha,
+        hora: accion.hora,
+        cliente: accion.cliente,
+        telefono: accion.telefono,
+        personas: accion.personas,
+        zona: accion.zona,
+        mesaId: accion.mesaId,
+        notas: accion.notas,
+      });
+
+    case 'ESTADO_RESERVA':
+      return aplicarEstadoReserva(estado, accion.reservaId, accion.estado);
+
+    case 'SENTAR_RESERVA':
+      return aplicarSentarReserva(estado, {
+        reservaId: accion.reservaId,
+        mesaId: accion.mesaId,
+        comensales: accion.comensales,
+        mesero: accion.mesero,
+      });
+
+    case 'ABRIR_MESA':
+      return aplicarAbrirMesa(estado, {
+        mesaId: accion.mesaId,
+        comensales: accion.comensales,
+        mesero: accion.mesero,
+      });
+
+    case 'CONSUMO_MESA':
+      return aplicarConsumo(estado, accion.sesionId, accion.productoId, accion.delta);
+
+    case 'QUITAR_CONSUMO':
+      return aplicarQuitarConsumo(estado, accion.sesionId, accion.productoId);
+
+    case 'CERRAR_MESA':
+      return aplicarCerrarMesa(estado, accion.sesionId);
+
+    case 'LIMPIAR_MESA':
+      return aplicarLimpiarMesa(estado, accion.mesaId);
 
     case 'REINICIAR':
       return construirEstadoInicial();

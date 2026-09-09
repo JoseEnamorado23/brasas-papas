@@ -10,6 +10,7 @@ datos precargado con ~2 semanas de operación para hacer una demostración.
 - Vite + React 18 + TypeScript
 - Tailwind CSS 3
 - Recharts (gráficas)
+- Three.js (modelo 3D del salón)
 - Lucide React (iconos)
 
 ## Puesta en marcha
@@ -32,6 +33,8 @@ Sitio estático de Vite. Framework preset **Vite**, build `npm run build`, outpu
 | --- | --- |
 | **Punto de venta** | Carta con emoji por producto, filtro por categoría y buscador. Combos prearmados que muestran lo que incluyen y el ahorro frente a comprar suelto. Carrito con impuesto al consumo 8% y forma de pago. Cada venta genera un asiento compuesto (caja, ingreso, impuesto por pagar, costo de ventas, salida de inventario). |
 | **Ventas** | Historial operativo paginado con canal (mostrador / domicilio); cada fila se expande al detalle de productos y al asiento vinculado. |
+| **Reservas** | Agenda por fecha con estados (pendiente → confirmada → sentada → cumplida, más no-show y cancelada). Al **sentar** una reserva se le asigna una mesa libre y se abre su cuenta. Panel de próximas reservas y KPIs del día (comensales esperados, confirmadas, caídas). |
+| **Ocupación de mesas** | Modelo 3D interactivo del salón con Three.js: órbita con el mouse, mesas coloreadas por estado (libre / ocupada / reservada / por limpiar) y click para seleccionarlas. La mesa seleccionada se gestiona en un panel lateral: abrir walk-in, sentar la reserva, cargar consumo (con impuesto al consumo 8%), cerrar la cuenta y marcar la mesa como limpia. Tablero por zona y sesiones cerradas del día con duración y consumo. Es una capa operativa: **no genera asientos** (el cobro se registra en el punto de venta). |
 | **Domicilios** | Pedidos con canal propio o por plataforma (Rappi, Didi Food). Valor de envío por zona, asignación de domiciliario, tablero por estado (recibido → en preparación → en camino → entregado) y liquidación de plataformas. Al entregar se genera la venta y el asiento compuesto; los pedidos por plataforma registran la comisión y quedan como cuenta por cobrar hasta la liquidación. |
 | **Compras y gastos** | Formularios para compras a proveedor (inventario o gasto; contado, transferencia o crédito) y gastos operativos por categoría. |
 | **Empleados y nómina** | Alta de empleados y corrida de nómina quincenal: devengado, deducciones de salud y pensión (8%) y neto. Genera el asiento de nómina. |
@@ -45,11 +48,13 @@ Sitio estático de Vite. Framework preset **Vite**, build `npm run build`, outpu
 | --- | --- |
 | `src/data/cuentas.ts` | Plan de cuentas, tasas de impuesto y deducción, mapeos de categoría a cuenta |
 | `src/data/menu.ts` · `personal.ts` | Carta y plantilla inicial |
+| `src/data/salon.ts` | Distribución inicial de mesas (zonas y coordenadas para el 3D) y colores por estado |
 | `src/data/seed.ts` | `construirEstadoInicial()` — arma la demo aplicando los mismos `aplicar*` que el reducer |
 | `src/lib/operaciones.ts` | Traduce cada evento operativo (venta, compra, gasto, nómina) en su asiento de partida doble |
+| `src/lib/salon.ts` | Operaciones puras de reservas y mesas (sentar, abrir, consumo, cerrar, limpiar) y el estado derivado de cada mesa + indicadores del salón |
 | `src/lib/contabilidad.ts` | Motor de reportes: saldos, estado de resultados, balance general, libro mayor, balance de comprobación y series para gráficas |
 | `src/store/tienda.tsx` | `useReducer` + Context con toda la data en memoria |
-| `src/components/` | UI compartida, bloque de asiento y gráficas (Recharts) |
+| `src/components/` | UI compartida, bloque de asiento, gráficas (Recharts) y el salón 3D (`Salon3D.tsx`, Three.js) |
 | `src/views/` | Una vista por módulo |
 
 ## El motor contable

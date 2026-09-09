@@ -190,6 +190,78 @@ export interface PedidoDomicilio {
   asientoId?: string;
 }
 
+// --- Salón: mesas, reservas y ocupación ---------------------------
+
+export type ZonaSalon = 'Salón' | 'Terraza' | 'Barra' | 'Privado';
+export type FormaMesa = 'redonda' | 'cuadrada' | 'rectangular';
+
+/**
+ * Estado operativo de una mesa. No se guarda: se deriva de las sesiones
+ * abiertas, las reservas del día y la marca de limpieza (`estadoDeMesa`).
+ */
+export type EstadoMesa = 'Libre' | 'Ocupada' | 'Reservada' | 'Por limpiar';
+
+export interface Mesa {
+  id: string; // M-01
+  nombre: string; // "Mesa 1"
+  zona: ZonaSalon;
+  capacidad: number; // sillas
+  forma: FormaMesa;
+  /** Posición del centro en la planta, en metros (origen al centro del local). */
+  x: number;
+  z: number;
+  ancho: number; // dimensiones del tablero para el modelo 3D
+  fondo: number;
+  /** Queda en true al cerrar una cuenta; el salón la marca "Por limpiar". */
+  necesitaLimpieza: boolean;
+}
+
+export type EstadoReserva =
+  | 'Pendiente'
+  | 'Confirmada'
+  | 'Sentada'
+  | 'Cumplida'
+  | 'No-show'
+  | 'Cancelada';
+
+export interface Reserva {
+  id: string; // R-0001
+  fecha: string; // YYYY-MM-DD
+  hora: string; // HH:MM
+  cliente: string;
+  telefono: string;
+  personas: number;
+  zona?: ZonaSalon;
+  mesaId?: string; // mesa asignada, si la hay
+  notas?: string;
+  estado: EstadoReserva;
+  creada: number; // orden de llegada
+  sesionId?: string; // sesión de mesa generada al sentar la reserva
+}
+
+export interface LineaConsumo {
+  productoId: string;
+  nombre: string;
+  cantidad: number;
+  precioUnit: number;
+}
+
+export interface SesionMesa {
+  id: string; // S-0001
+  mesaId: string;
+  fecha: string;
+  aperturaTs: number; // Date.now() al sentar a los comensales
+  cierreTs?: number;
+  comensales: number;
+  mesero: string;
+  reservaId?: string;
+  consumo: LineaConsumo[];
+  base: number; // sin impuesto
+  impuesto: number;
+  total: number;
+  estado: 'Abierta' | 'Cerrada';
+}
+
 export interface EstadoApp {
   cuentas: Cuenta[];
   productos: Producto[];
@@ -202,4 +274,7 @@ export interface EstadoApp {
   gastos: Gasto[];
   nominas: PagoNomina[];
   pedidos: PedidoDomicilio[];
+  mesas: Mesa[];
+  reservas: Reserva[];
+  sesiones: SesionMesa[];
 }

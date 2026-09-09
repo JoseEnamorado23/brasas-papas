@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
+  Armchair,
   Bike,
   BookOpenText,
+  CalendarClock,
   LayoutDashboard,
   Library,
   Menu,
@@ -16,6 +18,8 @@ import { TiendaProvider, useTienda } from './store/tienda';
 import { calcularIndicadores, formatoMoneda } from './lib/contabilidad';
 import { PuntoDeVenta } from './views/PuntoDeVenta';
 import { Ventas } from './views/Ventas';
+import { Reservas } from './views/Reservas';
+import { Mesas } from './views/Mesas';
 import { Domicilios } from './views/Domicilios';
 import { ComprasGastos } from './views/ComprasGastos';
 import { Empleados } from './views/Empleados';
@@ -26,6 +30,8 @@ import { Dashboard } from './views/Dashboard';
 type Vista =
   | 'venta'
   | 'ventas'
+  | 'reservas'
+  | 'mesas'
   | 'domicilios'
   | 'compras'
   | 'empleados'
@@ -36,6 +42,8 @@ type Vista =
 const NAV: Array<ItemNav & { id: Vista; titulo: string }> = [
   { id: 'venta', label: 'Punto de venta', titulo: 'Punto de venta', icon: Store },
   { id: 'ventas', label: 'Ventas', titulo: 'Historial de ventas', icon: ShoppingBag },
+  { id: 'reservas', label: 'Reservas', titulo: 'Reservas', icon: CalendarClock },
+  { id: 'mesas', label: 'Ocupación de mesas', titulo: 'Ocupación de mesas y salón 3D', icon: Armchair },
   { id: 'domicilios', label: 'Domicilios', titulo: 'Domicilios', icon: Bike },
   { id: 'compras', label: 'Compras y gastos', titulo: 'Compras y gastos', icon: Truck },
   { id: 'empleados', label: 'Empleados', titulo: 'Empleados y nómina', icon: Users },
@@ -162,6 +170,8 @@ function Aplicacion() {
         <div className="flex-1 px-4 py-5 md:px-8 md:py-6">
           {vista === 'venta' && <PuntoDeVenta />}
           {vista === 'ventas' && <Ventas />}
+          {vista === 'reservas' && <Reservas />}
+          {vista === 'mesas' && <Mesas />}
           {vista === 'domicilios' && <Domicilios />}
           {vista === 'compras' && <ComprasGastos />}
           {vista === 'empleados' && <Empleados />}

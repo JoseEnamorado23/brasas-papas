@@ -4,6 +4,7 @@ import { catalogoCuentas } from './cuentas';
 import { catalogoProductos } from './menu';
 import { empleadosIniciales } from './personal';
 import { domiciliariosIniciales, plataformasIniciales, tarifaZona } from './domicilios';
+import { mesasIniciales } from './salon';
 import {
   aplicarAsientoManual,
   aplicarAvancePedido,
@@ -15,7 +16,15 @@ import {
   aplicarVenta,
   type EntradaPedido,
 } from '../lib/operaciones';
-import { sumaISO } from '../lib/formato';
+import {
+  aplicarAbrirMesa,
+  aplicarCerrarMesa,
+  aplicarConsumo,
+  aplicarEstadoReserva,
+  aplicarNuevaReserva,
+  aplicarSentarReserva,
+} from '../lib/salon';
+import { hoyISO, sumaISO } from '../lib/formato';
 
 const INICIO_OPERACION = '2026-08-25';
 
@@ -105,6 +114,9 @@ export function construirEstadoInicial(): EstadoApp {
     gastos: [],
     nominas: [],
     pedidos: [],
+    mesas: mesasIniciales,
+    reservas: [],
+    sesiones: [],
   };
 
   // Apertura y montaje del negocio.
@@ -244,6 +256,96 @@ export function construirEstadoInicial(): EstadoApp {
 
   // Se liquida una plataforma para mostrar el cobro; la otra queda por cobrar.
   estado = aplicarLiquidacionPlataforma(estado, 'plat-didi');
+
+  // --- Salón: reservas del día y ocupación de mesas ---------------
+  estado = sembrarSalon(estado);
+
+  return estado;
+}
+
+/**
+ * Agenda de reservas de hoy en distintos estados y unas cuantas mesas ocupadas
+ * (dos walk-in, una reserva sentada y un almuerzo ya cerrado que deja la mesa
+ * por limpiar), para que el tablero y el modelo 3D arranquen con movimiento.
+ */
+function sembrarSalon(estadoBase: EstadoApp): EstadoApp {
+  let estado = estadoBase;
+  const hoy = hoyISO();
+  const manana = sumaISO(hoy, 1);
+  const ultimaSesion = () => estado.sesiones[estado.sesiones.length - 1].id;
+
+  // Reservas de hoy.
+  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '12:45', cliente: 'Almuerzo Prado', telefono: '310 2233445', personas: 4, zona: 'Salón', mesaId: 'M-03' }); // R-0001
+  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '20:00', cliente: 'Familia Ochoa', telefono: '311 9988776', personas: 6, zona: 'Salón', mesaId: 'M-06', notas: 'Cumpleaños, llevan torta' }); // R-0002
+  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '20:30', cliente: 'Grupo Herrera', telefono: '300 1212121', personas: 8, zona: 'Privado', mesaId: 'M-15' }); // R-0003
+  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '21:00', cliente: 'Nicolás Pardo', telefono: '315 4455667', personas: 2, zona: 'Terraza' }); // R-0004
+  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '19:00', cliente: 'Mesa Torres', telefono: '312 7766554', personas: 3 }); // R-0005
+  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '19:30', cliente: 'Cena Villa', telefono: '318 3344556', personas: 4, zona: 'Salón' }); // R-0006
+  // Próximos días.
+  estado = aplicarNuevaReserva(estado, { fecha: manana, hora: '13:00', cliente: 'Oficina Delta', telefono: '301 5566778', personas: 10, zona: 'Privado', mesaId: 'M-15' });
+  estado = aplicarNuevaReserva(estado, { fecha: manana, hora: '20:00', cliente: 'Aniversario Ríos', telefono: '311 2020202', personas: 2, zona: 'Terraza' });
+
+  estado = aplicarEstadoReserva(estado, 'R-0002', 'Confirmada');
+  estado = aplicarEstadoReserva(estado, 'R-0003', 'Confirmada');
+  estado = aplicarEstadoReserva(estado, 'R-0005', 'No-show');
+  estado = aplicarEstadoReserva(estado, 'R-0006', 'Cancelada');
+
+  // Almuerzo ya cerrado (S-0001): la mesa M-03 queda "Por limpiar".
+  estado = aplicarSentarReserva(estado, { reservaId: 'R-0001', mesaId: 'M-03', comensales: 4, mesero: 'Valentina Ruiz' });
+  const almuerzo = ultimaSesion();
+  estado = aplicarConsumo(estado, almuerzo, 'ham-clasica', 2);
+  estado = aplicarConsumo(estado, almuerzo, 'ham-pollo', 2);
+  estado = aplicarConsumo(estado, almuerzo, 'papas-gajo', 2);
+  estado = aplicarConsumo(estado, almuerzo, 'limonada', 4);
+  estado = aplicarConsumo(estado, almuerzo, 'brownie', 2);
+  estado = aplicarCerrarMesa(estado, almuerzo);
+
+  // Familia Ochoa sentada con la cuenta abierta (S-0002).
+  estado = aplicarSentarReserva(estado, { reservaId: 'R-0002', mesaId: 'M-06', comensales: 6, mesero: 'Laura Restrepo' });
+  const ochoa = ultimaSesion();
+  estado = aplicarConsumo(estado, ochoa, 'ham-doble', 3);
+  estado = aplicarConsumo(estado, ochoa, 'ham-clasica', 3);
+  estado = aplicarConsumo(estado, ochoa, 'papas-clasicas', 3);
+  estado = aplicarConsumo(estado, ochoa, 'aros-cebolla', 2);
+  estado = aplicarConsumo(estado, ochoa, 'gaseosa', 4);
+  estado = aplicarConsumo(estado, ochoa, 'malteada', 2);
+
+  // Walk-in en el salón (S-0003).
+  estado = aplicarAbrirMesa(estado, { mesaId: 'M-01', comensales: 3, mesero: 'Valentina Ruiz' });
+  const walkinSalon = ultimaSesion();
+  estado = aplicarConsumo(estado, walkinSalon, 'ham-clasica', 2);
+  estado = aplicarConsumo(estado, walkinSalon, 'ham-veggie', 1);
+  estado = aplicarConsumo(estado, walkinSalon, 'papas-clasicas', 2);
+  estado = aplicarConsumo(estado, walkinSalon, 'gaseosa', 3);
+
+  // Walk-in en la terraza (S-0004).
+  estado = aplicarAbrirMesa(estado, { mesaId: 'M-11', comensales: 2, mesero: 'Laura Restrepo' });
+  const walkinTerraza = ultimaSesion();
+  estado = aplicarConsumo(estado, walkinTerraza, 'ham-pollo', 2);
+  estado = aplicarConsumo(estado, walkinTerraza, 'dedos-queso', 1);
+  estado = aplicarConsumo(estado, walkinTerraza, 'limonada', 2);
+
+  // Antigüedad realista de cada sesión (apertura y, si aplica, cierre).
+  const ahora = Date.now();
+  const MIN = 60000;
+  const desfase: Record<string, { abre: number; cierra?: number }> = {
+    'S-0001': { abre: 96, cierra: 34 },
+    'S-0002': { abre: 52 },
+    'S-0003': { abre: 38 },
+    'S-0004': { abre: 21 },
+  };
+  estado = {
+    ...estado,
+    sesiones: estado.sesiones.map((s) => {
+      const d = desfase[s.id];
+      if (!d) return s;
+      return {
+        ...s,
+        aperturaTs: ahora - d.abre * MIN,
+        cierreTs: d.cierra != null ? ahora - d.cierra * MIN : s.cierreTs,
+      };
+    }),
+  };
 
   return estado;
 }
