@@ -54,10 +54,12 @@ export function aplicarAsientoManual(
 export interface EntradaVenta {
   lineas: { productoId: string; cantidad: number }[];
   formaPago: FormaPago;
+  sedeId: string;
   fecha?: string;
 }
 
 export function aplicarVenta(estado: EstadoApp, entrada: EntradaVenta): EstadoApp {
+  if (!entrada.sedeId) return estado;
   const fecha = entrada.fecha ?? hoyISO();
 
   const lineas: LineaVenta[] = entrada.lineas
@@ -88,6 +90,7 @@ export function aplicarVenta(estado: EstadoApp, entrada: EntradaVenta): EstadoAp
     descripcion: `Venta ${ventaId} en punto de venta (${entrada.formaPago.toLowerCase()})`,
     origen: 'venta',
     referencia: ventaId,
+    sedeId: entrada.sedeId,
     detalles: [
       d(cuentaCaja(entrada.formaPago), total, 0),
       d(CTA.INGRESOS, 0, base),
@@ -109,6 +112,7 @@ export function aplicarVenta(estado: EstadoApp, entrada: EntradaVenta): EstadoAp
     canal: 'Mostrador',
     domicilio: 0,
     asientoId: asiento.id,
+    sedeId: entrada.sedeId,
   };
 
   return {
@@ -127,11 +131,12 @@ export interface EntradaCompra {
   destino: DestinoCompra;
   categoriaGasto?: CategoriaGasto;
   formaPago: FormaPagoCompra;
+  sedeId: string;
   fecha?: string;
 }
 
 export function aplicarCompra(estado: EstadoApp, entrada: EntradaCompra): EstadoApp {
-  if (entrada.monto <= 0) return estado;
+  if (entrada.monto <= 0 || !entrada.sedeId) return estado;
   const fecha = entrada.fecha ?? hoyISO();
   const compraId = folio('C', estado.compras.length);
 
@@ -148,6 +153,7 @@ export function aplicarCompra(estado: EstadoApp, entrada: EntradaCompra): Estado
     descripcion: `Compra ${compraId} a ${entrada.proveedor}: ${entrada.concepto}`,
     origen: 'compra',
     referencia: compraId,
+    sedeId: entrada.sedeId,
     detalles: [d(cuentaDebito, entrada.monto, 0), d(cuentaCredito, 0, entrada.monto)],
   });
 
@@ -161,6 +167,7 @@ export function aplicarCompra(estado: EstadoApp, entrada: EntradaCompra): Estado
     categoriaGasto: entrada.categoriaGasto,
     formaPago: entrada.formaPago,
     asientoId: asiento.id,
+    sedeId: entrada.sedeId,
   };
 
   return {
@@ -177,11 +184,12 @@ export interface EntradaGasto {
   concepto: string;
   monto: number;
   formaPago: FormaPago;
+  sedeId: string;
   fecha?: string;
 }
 
 export function aplicarGasto(estado: EstadoApp, entrada: EntradaGasto): EstadoApp {
-  if (entrada.monto <= 0) return estado;
+  if (entrada.monto <= 0 || !entrada.sedeId) return estado;
   const fecha = entrada.fecha ?? hoyISO();
   const gastoId = folio('G', estado.gastos.length);
 
@@ -190,6 +198,7 @@ export function aplicarGasto(estado: EstadoApp, entrada: EntradaGasto): EstadoAp
     descripcion: `Gasto ${gastoId}: ${entrada.concepto} (${entrada.categoria})`,
     origen: 'gasto',
     referencia: gastoId,
+    sedeId: entrada.sedeId,
     detalles: [
       d(cuentaPorCategoriaGasto[entrada.categoria], entrada.monto, 0),
       d(cuentaCaja(entrada.formaPago), 0, entrada.monto),
@@ -204,6 +213,7 @@ export function aplicarGasto(estado: EstadoApp, entrada: EntradaGasto): EstadoAp
     monto: entrada.monto,
     formaPago: entrada.formaPago,
     asientoId: asiento.id,
+    sedeId: entrada.sedeId,
   };
 
   return {
@@ -218,6 +228,7 @@ export function aplicarGasto(estado: EstadoApp, entrada: EntradaGasto): EstadoAp
 export interface EntradaNomina {
   periodo: string;
   empleadoIds: string[];
+  sedeId?: string;
   fecha?: string;
 }
 
@@ -260,6 +271,7 @@ export function aplicarNomina(estado: EstadoApp, entrada: EntradaNomina): Estado
     descripcion: `Nómina ${nominaId} · ${entrada.periodo} (${lineas.length} empleados)`,
     origen: 'nomina',
     referencia: nominaId,
+    sedeId: entrada.sedeId,
     detalles: [
       d(CTA.GASTO_PERSONAL, totalDevengado, 0),
       d(CTA.DEDUCCIONES_NOMINA, 0, totalDeducciones),
@@ -276,6 +288,7 @@ export function aplicarNomina(estado: EstadoApp, entrada: EntradaNomina): Estado
     totalDeducciones,
     totalNeto,
     asientoId: asiento.id,
+    sedeId: entrada.sedeId,
   };
 
   return {
@@ -298,6 +311,7 @@ export interface EntradaPedido {
   domicilio: number; // valor del envío cobrado al cliente
   formaPago: FormaPagoDomicilio;
   lineas: { productoId: string; cantidad: number }[];
+  sedeId: string;
   fecha?: string;
 }
 
@@ -309,6 +323,7 @@ const ORDEN_ESTADOS: EstadoPedido[] = [
 ];
 
 export function aplicarNuevoPedido(estado: EstadoApp, entrada: EntradaPedido): EstadoApp {
+  if (!entrada.sedeId) return estado;
   const lineas: LineaVenta[] = entrada.lineas
     .map(({ productoId, cantidad }) => {
       const producto = estado.productos.find((p) => p.id === productoId);
@@ -363,6 +378,7 @@ export function aplicarNuevoPedido(estado: EstadoApp, entrada: EntradaPedido): E
     comisionPlataforma,
     formaPago: entrada.canal === 'Plataforma' ? 'Plataforma' : entrada.formaPago,
     estado: 'Recibido',
+    sedeId: entrada.sedeId,
   };
 
   return { ...estado, pedidos: [...estado.pedidos, pedido] };
@@ -411,6 +427,7 @@ function entregarPedido(estado: EstadoApp, pedido: PedidoDomicilio): EstadoApp {
     descripcion: `Domicilio ${pedido.id} entregado a ${pedido.cliente} (${pedido.canal.toLowerCase()})`,
     origen: 'domicilio',
     referencia: pedido.id,
+    sedeId: pedido.sedeId,
     detalles,
   });
 
@@ -427,6 +444,7 @@ function entregarPedido(estado: EstadoApp, pedido: PedidoDomicilio): EstadoApp {
     domicilio: domicilioVenta,
     pedidoId: pedido.id,
     asientoId: asiento.id,
+    sedeId: pedido.sedeId,
   };
 
   return {
@@ -468,13 +486,17 @@ export function aplicarCancelacionPedido(estado: EstadoApp, pedidoId: string): E
 export function aplicarLiquidacionPlataforma(
   estado: EstadoApp,
   plataformaId: string,
+  sedeId?: string,
 ): EstadoApp {
   const plataforma = estado.plataformas.find((x) => x.id === plataformaId);
   if (!plataforma) return estado;
 
   const pendientes = estado.pedidos.filter(
     (p) =>
-      p.plataformaId === plataformaId && p.estado === 'Entregado' && !p.liquidado,
+      p.plataformaId === plataformaId &&
+      p.estado === 'Entregado' &&
+      !p.liquidado &&
+      (!sedeId || p.sedeId === sedeId),
   );
   const monto = pendientes.reduce(
     (s, p) => s + (p.base + p.impuesto - p.comisionPlataforma),
@@ -487,6 +509,7 @@ export function aplicarLiquidacionPlataforma(
     descripcion: `Liquidación de ${plataforma.nombre} (${pendientes.length} pedidos)`,
     origen: 'liquidacion',
     referencia: plataformaId,
+    sedeId,
     detalles: [d(CTA.BANCOS, monto, 0), d(CTA.CXC_PLATAFORMAS, 0, monto)],
   });
 

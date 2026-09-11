@@ -1,14 +1,16 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useTienda } from '../store/tienda';
 import { formatoFecha, formatoMoneda } from '../lib/contabilidad';
+import { filtrarPorSede } from '../lib/sedes';
 import { AsientoBloque } from '../components/AsientoBloque';
 import { EstadoVacio, Etiqueta, Kpi, Paginacion, Panel, usePaginacion } from '../components/ui';
 
 const POR_PAGINA = 8;
 
 export function Ventas() {
-  const { estado } = useTienda();
+  const { estado, sedeActual } = useTienda();
+  const vista = useMemo(() => filtrarPorSede(estado, sedeActual), [estado, sedeActual]);
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set());
 
   const alternar = (id: string) =>
@@ -18,15 +20,15 @@ export function Ventas() {
       return copia;
     });
 
-  const ventas = [...estado.ventas].reverse();
+  const ventas = [...vista.ventas].reverse();
   const pag = usePaginacion(ventas, POR_PAGINA);
-  const totalBase = estado.ventas.reduce((s, v) => s + v.base, 0);
-  const totalImpuesto = estado.ventas.reduce((s, v) => s + v.impuesto, 0);
-  const unidades = estado.ventas.reduce(
+  const totalBase = vista.ventas.reduce((s, v) => s + v.base, 0);
+  const totalImpuesto = vista.ventas.reduce((s, v) => s + v.impuesto, 0);
+  const unidades = vista.ventas.reduce(
     (s, v) => s + v.lineas.reduce((u, l) => u + l.cantidad, 0),
     0,
   );
-  const ticket = estado.ventas.length ? totalBase / estado.ventas.length : 0;
+  const ticket = vista.ventas.length ? totalBase / vista.ventas.length : 0;
 
   return (
     <div className="space-y-4">
@@ -34,7 +36,7 @@ export function Ventas() {
         <Kpi etiqueta="Ventas (base)" valor={formatoMoneda(totalBase)} />
         <Kpi etiqueta="Impuesto al consumo" valor={formatoMoneda(totalImpuesto)} />
         <Kpi etiqueta="Ticket promedio" valor={formatoMoneda(ticket)} />
-        <Kpi etiqueta="Unidades vendidas" valor={String(unidades)} nota={`${estado.ventas.length} tickets`} />
+        <Kpi etiqueta="Unidades vendidas" valor={String(unidades)} nota={`${vista.ventas.length} tickets`} />
       </div>
 
       <Panel titulo="Historial de ventas" sinPadding>
@@ -62,7 +64,7 @@ export function Ventas() {
               <tbody>
                 {pag.visibles.map((venta) => {
                   const abierto = abiertos.has(venta.id);
-                  const asiento = estado.asientos.find((a) => a.id === venta.asientoId);
+                  const asiento = vista.asientos.find((a) => a.id === venta.asientoId);
                   return (
                     <Fragment key={venta.id}>
                       <tr

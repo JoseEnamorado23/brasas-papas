@@ -7,47 +7,71 @@ export const ZONAS_SALON: ZonaSalon[] = ['Salón', 'Terraza', 'Barra', 'Privado'
 export const LOCAL = { ancho: 14, fondo: 11, altoMuro: 1.3 };
 
 /**
- * Distribución inicial del salón. `x`/`z` son el centro de cada mesa en metros,
- * con el origen al centro del local (x crece a la derecha, z hacia la fachada).
+ * Distribución de un salón tipo, en metros con el origen al centro del local
+ * (x crece a la derecha, z hacia la fachada). Las dos sedes comparten esta
+ * misma planta física; solo cambian el prefijo de folio y la sede dueña.
  */
-export const mesasIniciales: Mesa[] = [
-  // Salón principal: dos hileras.
-  m('M-01', 'Mesa 1', 'Salón', 4, 'cuadrada', -4.6, -2.6, 1.0, 1.0),
-  m('M-02', 'Mesa 2', 'Salón', 4, 'cuadrada', -1.6, -2.6, 1.0, 1.0),
-  m('M-03', 'Mesa 3', 'Salón', 4, 'cuadrada', 1.4, -2.6, 1.0, 1.0),
-  m('M-04', 'Mesa 4', 'Salón', 2, 'redonda', 4.3, -2.6, 0.85, 0.85),
-  m('M-05', 'Mesa 5', 'Salón', 4, 'cuadrada', -4.6, 0.4, 1.0, 1.0),
-  m('M-06', 'Mesa 6', 'Salón', 6, 'rectangular', -1.4, 0.4, 1.9, 1.0),
-  m('M-07', 'Mesa 7', 'Salón', 4, 'cuadrada', 1.6, 0.4, 1.0, 1.0),
-  m('M-08', 'Mesa 8', 'Salón', 2, 'redonda', 4.3, 0.4, 0.85, 0.85),
+function plantaTipo(
+  prefijo: string,
+  sedeId: string,
+): Mesa[] {
+  const m = (
+    numero: string,
+    nombre: string,
+    zona: ZonaSalon,
+    capacidad: number,
+    forma: Mesa['forma'],
+    x: number,
+    z: number,
+    ancho: number,
+    fondo: number,
+  ): Mesa => ({
+    id: `${prefijo}-${numero}`,
+    nombre,
+    zona,
+    capacidad,
+    forma,
+    x,
+    z,
+    ancho,
+    fondo,
+    necesitaLimpieza: false,
+    sedeId,
+  });
 
-  // Terraza: hilera contra la fachada.
-  m('M-09', 'Terraza 1', 'Terraza', 2, 'redonda', -4.4, 3.9, 0.85, 0.85),
-  m('M-10', 'Terraza 2', 'Terraza', 2, 'redonda', -1.9, 3.9, 0.85, 0.85),
-  m('M-11', 'Terraza 3', 'Terraza', 4, 'cuadrada', 1.1, 3.9, 1.0, 1.0),
-  m('M-12', 'Terraza 4', 'Terraza', 4, 'cuadrada', 4.1, 3.9, 1.0, 1.0),
+  return [
+    // Salón principal: dos hileras.
+    m('01', 'Mesa 1', 'Salón', 4, 'cuadrada', -4.6, -2.6, 1.0, 1.0),
+    m('02', 'Mesa 2', 'Salón', 4, 'cuadrada', -1.6, -2.6, 1.0, 1.0),
+    m('03', 'Mesa 3', 'Salón', 4, 'cuadrada', 1.4, -2.6, 1.0, 1.0),
+    m('04', 'Mesa 4', 'Salón', 2, 'redonda', 4.3, -2.6, 0.85, 0.85),
+    m('05', 'Mesa 5', 'Salón', 4, 'cuadrada', -4.6, 0.4, 1.0, 1.0),
+    m('06', 'Mesa 6', 'Salón', 6, 'rectangular', -1.4, 0.4, 1.9, 1.0),
+    m('07', 'Mesa 7', 'Salón', 4, 'cuadrada', 1.6, 0.4, 1.0, 1.0),
+    m('08', 'Mesa 8', 'Salón', 2, 'redonda', 4.3, 0.4, 0.85, 0.85),
 
-  // Barra: mesas altas contra el fondo.
-  m('M-13', 'Barra 1', 'Barra', 2, 'cuadrada', -5.4, -4.4, 0.7, 0.7),
-  m('M-14', 'Barra 2', 'Barra', 2, 'cuadrada', -3.9, -4.4, 0.7, 0.7),
+    // Terraza: hilera contra la fachada.
+    m('09', 'Terraza 1', 'Terraza', 2, 'redonda', -4.4, 3.9, 0.85, 0.85),
+    m('10', 'Terraza 2', 'Terraza', 2, 'redonda', -1.9, 3.9, 0.85, 0.85),
+    m('11', 'Terraza 3', 'Terraza', 4, 'cuadrada', 1.1, 3.9, 1.0, 1.0),
+    m('12', 'Terraza 4', 'Terraza', 4, 'cuadrada', 4.1, 3.9, 1.0, 1.0),
 
-  // Privado: mesa grande en la esquina.
-  m('M-15', 'Privado', 'Privado', 8, 'rectangular', 4.7, -4.2, 2.3, 1.1),
-];
+    // Barra: mesas altas contra el fondo.
+    m('13', 'Barra 1', 'Barra', 2, 'cuadrada', -5.4, -4.4, 0.7, 0.7),
+    m('14', 'Barra 2', 'Barra', 2, 'cuadrada', -3.9, -4.4, 0.7, 0.7),
 
-function m(
-  id: string,
-  nombre: string,
-  zona: ZonaSalon,
-  capacidad: number,
-  forma: Mesa['forma'],
-  x: number,
-  z: number,
-  ancho: number,
-  fondo: number,
-): Mesa {
-  return { id, nombre, zona, capacidad, forma, x, z, ancho, fondo, necesitaLimpieza: false };
+    // Privado: mesa grande en la esquina.
+    m('15', 'Privado', 'Privado', 8, 'rectangular', 4.7, -4.2, 2.3, 1.1),
+  ];
 }
+
+/** Mesas de la Sede Centro: conserva los folios M-01..M-15 usados por la demo. */
+export const mesasCentro: Mesa[] = plantaTipo('M', 'sede-centro');
+
+/** Mesas de la Sede Norte: misma planta física, folios N-01..N-15. */
+export const mesasNorte: Mesa[] = plantaTipo('N', 'sede-norte');
+
+export const mesasIniciales: Mesa[] = [...mesasCentro, ...mesasNorte];
 
 /** Color por estado, compartido por el modelo 3D y las etiquetas de las vistas. */
 export const COLOR_ESTADO_MESA: Record<EstadoMesa, string> = {

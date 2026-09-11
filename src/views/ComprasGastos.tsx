@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type {
   CategoriaGasto,
   DestinoCompra,
@@ -8,6 +8,7 @@ import type {
 import { useTienda } from '../store/tienda';
 import { CATEGORIAS_GASTO } from '../data/cuentas';
 import { formatoFecha, formatoMoneda } from '../lib/contabilidad';
+import { filtrarPorSede, sedeParaOperar } from '../lib/sedes';
 import { Boton, Campo, Entrada, EstadoVacio, Etiqueta, Panel, Selector } from '../components/ui';
 
 type MovimientoUnificado = {
@@ -21,7 +22,14 @@ type MovimientoUnificado = {
 };
 
 export function ComprasGastos() {
-  const { estado, dispatch } = useTienda();
+  const { estado, dispatch, sedeActual } = useTienda();
+  const vista = useMemo(() => filtrarPorSede(estado, sedeActual), [estado, sedeActual]);
+
+  // --- Sede de operación (compartida por ambos formularios) ---
+  const [sedeForm, setSedeForm] = useState(sedeParaOperar(sedeActual, estado.sedes));
+  useEffect(() => {
+    setSedeForm(sedeParaOperar(sedeActual, estado.sedes));
+  }, [sedeActual, estado.sedes]);
 
   // --- Formulario de compra ---
   const [proveedor, setProveedor] = useState('');
@@ -33,7 +41,14 @@ export function ComprasGastos() {
 
   const registrarCompra = () => {
     const monto = Number(montoCompra);
-    if (!proveedor.trim() || !conceptoCompra.trim() || !Number.isFinite(monto) || monto <= 0) return;
+    if (
+      !proveedor.trim() ||
+      !conceptoCompra.trim() ||
+      !Number.isFinite(monto) ||
+      monto <= 0 ||
+      !sedeForm
+    )
+      return;
     dispatch({
       tipo: 'COMPRA',
       proveedor: proveedor.trim(),
@@ -42,6 +57,7 @@ export function ComprasGastos() {
       destino,
       categoriaGasto: destino === 'Gasto' ? categoriaCompra : undefined,
       formaPago: pagoCompra,
+      sedeId: sedeForm,
     });
     setProveedor('');
     setConceptoCompra('');
@@ -56,20 +72,21 @@ export function ComprasGastos() {
 
   const registrarGasto = () => {
     const monto = Number(montoGasto);
-    if (!conceptoGasto.trim() || !Number.isFinite(monto) || monto <= 0) return;
+    if (!conceptoGasto.trim() || !Number.isFinite(monto) || monto <= 0 || !sedeForm) return;
     dispatch({
       tipo: 'GASTO',
       categoria: categoriaGasto,
       concepto: conceptoGasto.trim(),
       monto,
       formaPago: pagoGasto,
+      sedeId: sedeForm,
     });
     setConceptoGasto('');
     setMontoGasto('');
   };
 
   const movimientos: MovimientoUnificado[] = [
-    ...estado.compras.map((c) => ({
+    ...vista.compras.map((c) => ({
       id: c.id,
       fecha: c.fecha,
       tipo: 'Compra' as const,
@@ -78,7 +95,7 @@ export function ComprasGastos() {
       formaPago: c.formaPago,
       asientoId: c.asientoId,
     })),
-    ...estado.gastos.map((g) => ({
+    ...vista.gastos.map((g) => ({
       id: g.id,
       fecha: g.fecha,
       tipo: 'Gasto' as const,
@@ -91,6 +108,17 @@ export function ComprasGastos() {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-paper/60 px-4 py-2.5 text-sm">
+        <span className="text-muted">Sede de las nuevas compras y gastos:</span>
+        <Selector value={sedeForm} onChange={(e) => setSedeForm(e.target.value)} className="!py-1 text-xs">
+          {estado.sedes.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.nombre}
+            </option>
+          ))}
+        </Selector>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel titulo="Registrar compra a proveedor">
           <div className="grid gap-3">
@@ -154,7 +182,12 @@ export function ComprasGastos() {
                 </Selector>
               </Campo>
             </div>
-            <Boton type="button" onClick={registrarCompra} className="mt-1 w-full">
+            <Boton
+              type="button"
+              onClick={registrarCompra}
+              disabled={!sedeForm}
+              className="mt-1 w-full"
+            >
               Registrar compra
             </Boton>
             <p className="text-xs text-muted">
@@ -205,7 +238,12 @@ export function ComprasGastos() {
                 </Selector>
               </Campo>
             </div>
-            <Boton type="button" onClick={registrarGasto} className="mt-1 w-full">
+            <Boton
+              type="button"
+              onClick={registrarGasto}
+              disabled={!sedeForm}
+              className="mt-1 w-full"
+            >
               Registrar gasto
             </Boton>
             <p className="text-xs text-muted">

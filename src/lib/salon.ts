@@ -41,10 +41,11 @@ export interface EntradaReserva {
   zona?: ZonaSalon;
   mesaId?: string;
   notas?: string;
+  sedeId: string;
 }
 
 export function aplicarNuevaReserva(estado: EstadoApp, entrada: EntradaReserva): EstadoApp {
-  if (!entrada.cliente.trim() || entrada.personas <= 0) return estado;
+  if (!entrada.cliente.trim() || entrada.personas <= 0 || !entrada.sedeId) return estado;
 
   const reserva: Reserva = {
     id: folio('R', estado.reservas.length),
@@ -58,6 +59,7 @@ export function aplicarNuevaReserva(estado: EstadoApp, entrada: EntradaReserva):
     notas: entrada.notas?.trim() || undefined,
     estado: 'Pendiente',
     creada: estado.reservas.length + 1,
+    sedeId: entrada.sedeId,
   };
 
   return { ...estado, reservas: [...estado.reservas, reserva] };
@@ -110,6 +112,7 @@ export function aplicarSentarReserva(estado: EstadoApp, entrada: EntradaSentar):
     impuesto: 0,
     total: 0,
     estado: 'Abierta',
+    sedeId: mesa.sedeId,
   });
 
   return {
@@ -148,6 +151,7 @@ export function aplicarAbrirMesa(estado: EstadoApp, entrada: EntradaAbrirMesa): 
     impuesto: 0,
     total: 0,
     estado: 'Abierta',
+    sedeId: mesa.sedeId,
   };
 
   return { ...estado, sesiones: [...estado.sesiones, sesion] };

@@ -1,4 +1,11 @@
-import { createContext, useContext, useMemo, useReducer, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useReducer,
+  useState,
+  type ReactNode,
+} from 'react';
 import type {
   CanalDomicilio,
   CategoriaGasto,
@@ -6,16 +13,19 @@ import type {
   DestinoCompra,
   Domiciliario,
   EstadoApp,
+  EstadoEvento,
   EstadoReserva,
   Empleado,
   FormaPago,
   FormaPagoCompra,
   FormaPagoDomicilio,
   Producto,
+  TipoEvento,
   ZonaDomicilio,
   ZonaSalon,
 } from '../types';
 import { construirEstadoInicial } from '../data/seed';
+import { TODAS_SEDES } from '../data/sedes';
 import {
   aplicarAvancePedido,
   aplicarCancelacionPedido,
@@ -36,9 +46,20 @@ import {
   aplicarQuitarConsumo,
   aplicarSentarReserva,
 } from '../lib/salon';
+import {
+  aplicarAnticipoEvento,
+  aplicarCotizarEvento,
+  aplicarEstadoEvento,
+  aplicarNuevaSolicitudEvento,
+} from '../lib/eventos';
 
 export type Accion =
-  | { tipo: 'VENTA'; lineas: { productoId: string; cantidad: number }[]; formaPago: FormaPago }
+  | {
+      tipo: 'VENTA';
+      lineas: { productoId: string; cantidad: number }[];
+      formaPago: FormaPago;
+      sedeId: string;
+    }
   | {
       tipo: 'COMPRA';
       proveedor: string;
@@ -47,6 +68,7 @@ export type Accion =
       destino: DestinoCompra;
       categoriaGasto?: CategoriaGasto;
       formaPago: FormaPagoCompra;
+      sedeId: string;
     }
   | {
       tipo: 'GASTO';
@@ -54,9 +76,16 @@ export type Accion =
       concepto: string;
       monto: number;
       formaPago: FormaPago;
+      sedeId: string;
     }
-  | { tipo: 'NOMINA'; periodo: string; empleadoIds: string[] }
-  | { tipo: 'NUEVO_EMPLEADO'; nombre: string; cargo: string; salarioMensual: number }
+  | { tipo: 'NOMINA'; periodo: string; empleadoIds: string[]; sedeId?: string }
+  | {
+      tipo: 'NUEVO_EMPLEADO';
+      nombre: string;
+      cargo: string;
+      salarioMensual: number;
+      sedeId: string;
+    }
   | {
       tipo: 'NUEVO_PRODUCTO';
       nombre: string;
@@ -77,10 +106,11 @@ export type Accion =
       domicilio: number;
       formaPago: FormaPagoDomicilio;
       lineas: { productoId: string; cantidad: number }[];
+      sedeId: string;
     }
   | { tipo: 'AVANZAR_PEDIDO'; pedidoId: string }
   | { tipo: 'CANCELAR_PEDIDO'; pedidoId: string }
-  | { tipo: 'LIQUIDAR_PLATAFORMA'; plataformaId: string }
+  | { tipo: 'LIQUIDAR_PLATAFORMA'; plataformaId: string; sedeId?: string }
   | { tipo: 'NUEVO_DOMICILIARIO'; nombre: string; telefono: string; tarifaEntrega: number }
   | {
       tipo: 'NUEVA_RESERVA';
@@ -92,6 +122,7 @@ export type Accion =
       zona?: ZonaSalon;
       mesaId?: string;
       notas?: string;
+      sedeId: string;
     }
   | {
       tipo: 'ESTADO_RESERVA';
@@ -110,6 +141,21 @@ export type Accion =
   | { tipo: 'QUITAR_CONSUMO'; sesionId: string; productoId: string }
   | { tipo: 'CERRAR_MESA'; sesionId: string }
   | { tipo: 'LIMPIAR_MESA'; mesaId: string }
+  | {
+      tipo: 'NUEVA_SOLICITUD_EVENTO';
+      sedeId: string;
+      cliente: string;
+      telefono: string;
+      fecha: string;
+      hora: string;
+      lugar: string;
+      tipo_evento: TipoEvento;
+      numeroPersonas: number;
+      descripcion: string;
+    }
+  | { tipo: 'COTIZAR_EVENTO'; eventoId: string; valorCotizado: number }
+  | { tipo: 'ESTADO_EVENTO'; eventoId: string; estado: EstadoEvento }
+  | { tipo: 'ANTICIPO_EVENTO'; eventoId: string; pagado: boolean; valorAnticipo?: number }
   | { tipo: 'REINICIAR' };
 
 const EMOJI_POR_CATEGORIA: Record<CategoriaProducto, string> = {
@@ -123,7 +169,11 @@ const EMOJI_POR_CATEGORIA: Record<CategoriaProducto, string> = {
 function reductor(estado: EstadoApp, accion: Accion): EstadoApp {
   switch (accion.tipo) {
     case 'VENTA':
-      return aplicarVenta(estado, { lineas: accion.lineas, formaPago: accion.formaPago });
+      return aplicarVenta(estado, {
+        lineas: accion.lineas,
+        formaPago: accion.formaPago,
+        sedeId: accion.sedeId,
+      });
 
     case 'COMPRA':
       return aplicarCompra(estado, accion);
@@ -135,6 +185,7 @@ function reductor(estado: EstadoApp, accion: Accion): EstadoApp {
       return aplicarNomina(estado, {
         periodo: accion.periodo,
         empleadoIds: accion.empleadoIds,
+        sedeId: accion.sedeId,
       });
 
     case 'NUEVO_EMPLEADO': {
@@ -144,6 +195,7 @@ function reductor(estado: EstadoApp, accion: Accion): EstadoApp {
         cargo: accion.cargo,
         salarioMensual: accion.salarioMensual,
         activo: true,
+        sedeId: accion.sedeId,
       };
       return { ...estado, empleados: [...estado.empleados, nuevo] };
     }
@@ -172,6 +224,7 @@ function reductor(estado: EstadoApp, accion: Accion): EstadoApp {
         domicilio: accion.domicilio,
         formaPago: accion.formaPago,
         lineas: accion.lineas,
+        sedeId: accion.sedeId,
       });
 
     case 'AVANZAR_PEDIDO':
@@ -181,7 +234,7 @@ function reductor(estado: EstadoApp, accion: Accion): EstadoApp {
       return aplicarCancelacionPedido(estado, accion.pedidoId);
 
     case 'LIQUIDAR_PLATAFORMA':
-      return aplicarLiquidacionPlataforma(estado, accion.plataformaId);
+      return aplicarLiquidacionPlataforma(estado, accion.plataformaId, accion.sedeId);
 
     case 'NUEVO_DOMICILIARIO': {
       const nuevo: Domiciliario = {
@@ -204,6 +257,7 @@ function reductor(estado: EstadoApp, accion: Accion): EstadoApp {
         zona: accion.zona,
         mesaId: accion.mesaId,
         notas: accion.notas,
+        sedeId: accion.sedeId,
       });
 
     case 'ESTADO_RESERVA':
@@ -236,6 +290,28 @@ function reductor(estado: EstadoApp, accion: Accion): EstadoApp {
     case 'LIMPIAR_MESA':
       return aplicarLimpiarMesa(estado, accion.mesaId);
 
+    case 'NUEVA_SOLICITUD_EVENTO':
+      return aplicarNuevaSolicitudEvento(estado, {
+        sedeId: accion.sedeId,
+        cliente: accion.cliente,
+        telefono: accion.telefono,
+        fecha: accion.fecha,
+        hora: accion.hora,
+        lugar: accion.lugar,
+        tipo: accion.tipo_evento,
+        numeroPersonas: accion.numeroPersonas,
+        descripcion: accion.descripcion,
+      });
+
+    case 'COTIZAR_EVENTO':
+      return aplicarCotizarEvento(estado, accion.eventoId, accion.valorCotizado);
+
+    case 'ESTADO_EVENTO':
+      return aplicarEstadoEvento(estado, accion.eventoId, accion.estado);
+
+    case 'ANTICIPO_EVENTO':
+      return aplicarAnticipoEvento(estado, accion.eventoId, accion.pagado, accion.valorAnticipo);
+
     case 'REINICIAR':
       return construirEstadoInicial();
 
@@ -247,13 +323,20 @@ function reductor(estado: EstadoApp, accion: Accion): EstadoApp {
 interface ValorContexto {
   estado: EstadoApp;
   dispatch: (accion: Accion) => void;
+  /** Sede seleccionada globalmente: el id de una sede, o `TODAS_SEDES` para el consolidado. */
+  sedeActual: string;
+  setSedeActual: (sedeId: string) => void;
 }
 
 const TiendaContext = createContext<ValorContexto | null>(null);
 
 export function TiendaProvider({ children }: { children: ReactNode }) {
   const [estado, dispatch] = useReducer(reductor, undefined, construirEstadoInicial);
-  const valor = useMemo(() => ({ estado, dispatch }), [estado]);
+  const [sedeActual, setSedeActual] = useState<string>(TODAS_SEDES);
+  const valor = useMemo(
+    () => ({ estado, dispatch, sedeActual, setSedeActual }),
+    [estado, sedeActual],
+  );
   return <TiendaContext.Provider value={valor}>{children}</TiendaContext.Provider>;
 }
 

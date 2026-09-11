@@ -1,5 +1,14 @@
 export type TipoCuenta = 'Activo' | 'Pasivo' | 'Patrimonio' | 'Ingreso' | 'Gasto';
 
+// --- Sedes ------------------------------------------------------------
+
+export interface Sede {
+  id: string;
+  nombre: string;
+  direccion: string;
+  telefono: string;
+}
+
 export interface Cuenta {
   id: number;
   nombre: string;
@@ -28,6 +37,8 @@ export interface Asiento {
   origen: OrigenAsiento;
   referencia?: string; // folio de la venta / compra / nómina que lo generó
   detalles: DetalleAsiento[];
+  /** Sede que originó el movimiento; ausente en asientos compartidos (p. ej. la apertura). */
+  sedeId?: string;
 }
 
 export type CategoriaProducto =
@@ -60,6 +71,7 @@ export interface Empleado {
   cargo: string;
   salarioMensual: number;
   activo: boolean;
+  sedeId: string;
 }
 
 export type FormaPago = 'Efectivo' | 'Transferencia';
@@ -95,6 +107,7 @@ export interface Venta {
   domicilio: number; // ingreso por envío cobrado al cliente (0 en mostrador)
   pedidoId?: string; // folio del pedido a domicilio que la originó
   asientoId: string;
+  sedeId: string;
 }
 
 export type DestinoCompra = 'Inventario' | 'Gasto';
@@ -109,6 +122,7 @@ export interface Compra {
   categoriaGasto?: CategoriaGasto;
   formaPago: FormaPagoCompra;
   asientoId: string;
+  sedeId: string;
 }
 
 export interface Gasto {
@@ -119,6 +133,7 @@ export interface Gasto {
   monto: number;
   formaPago: FormaPago;
   asientoId: string;
+  sedeId: string;
 }
 
 export interface LineaNomina {
@@ -139,6 +154,8 @@ export interface PagoNomina {
   totalDeducciones: number;
   totalNeto: number;
   asientoId: string;
+  /** Sede a la que pertenece la nómina; ausente si el pago abarca varias sedes. */
+  sedeId?: string;
 }
 
 export type ZonaDomicilio = 'Centro' | 'Chapinero' | 'Norte' | 'Sur' | 'Occidente';
@@ -188,6 +205,7 @@ export interface PedidoDomicilio {
   liquidado?: boolean; // solo plataforma: ya se cobró la liquidación
   ventaId?: string;
   asientoId?: string;
+  sedeId: string;
 }
 
 // --- Salón: mesas, reservas y ocupación ---------------------------
@@ -214,6 +232,7 @@ export interface Mesa {
   fondo: number;
   /** Queda en true al cerrar una cuenta; el salón la marca "Por limpiar". */
   necesitaLimpieza: boolean;
+  sedeId: string;
 }
 
 export type EstadoReserva =
@@ -237,6 +256,7 @@ export interface Reserva {
   estado: EstadoReserva;
   creada: number; // orden de llegada
   sesionId?: string; // sesión de mesa generada al sentar la reserva
+  sedeId: string;
 }
 
 export interface LineaConsumo {
@@ -260,9 +280,46 @@ export interface SesionMesa {
   impuesto: number;
   total: number;
   estado: 'Abierta' | 'Cerrada';
+  sedeId: string;
+}
+
+// --- Eventos y catering ------------------------------------------
+
+export type EstadoEvento =
+  | 'Pendiente por cotizar'
+  | 'Cotizado'
+  | 'Confirmado'
+  | 'Realizado'
+  | 'Cancelado';
+
+export type TipoEvento =
+  | 'Cumpleaños'
+  | 'Primera comunión'
+  | 'Matrimonio'
+  | 'Grado'
+  | 'Empresarial'
+  | 'Otro';
+
+export interface SolicitudEvento {
+  id: string; // EV-0001
+  sedeId: string;
+  cliente: string;
+  telefono: string;
+  fecha: string; // YYYY-MM-DD
+  hora: string; // HH:MM
+  lugar: string; // dirección o sitio del evento
+  tipo: TipoEvento;
+  numeroPersonas: number;
+  descripcion: string;
+  estado: EstadoEvento;
+  valorCotizado?: number;
+  anticipoPagado: boolean;
+  valorAnticipo?: number;
+  creada: number; // orden de llegada
 }
 
 export interface EstadoApp {
+  sedes: Sede[];
   cuentas: Cuenta[];
   productos: Producto[];
   empleados: Empleado[];
@@ -277,4 +334,5 @@ export interface EstadoApp {
   mesas: Mesa[];
   reservas: Reserva[];
   sesiones: SesionMesa[];
+  eventos: SolicitudEvento[];
 }

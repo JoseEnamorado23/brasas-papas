@@ -5,6 +5,8 @@ import { catalogoProductos } from './menu';
 import { empleadosIniciales } from './personal';
 import { domiciliariosIniciales, plataformasIniciales, tarifaZona } from './domicilios';
 import { mesasIniciales } from './salon';
+import { sedesIniciales } from './sedes';
+import { eventosIniciales } from './eventos';
 import {
   aplicarAsientoManual,
   aplicarAvancePedido,
@@ -27,6 +29,8 @@ import {
 import { hoyISO, sumaISO } from '../lib/formato';
 
 const INICIO_OPERACION = '2026-08-25';
+const CENTRO = 'sede-centro';
+const NORTE = 'sede-norte';
 
 /** Generador determinista simple para armar canastas de venta reproducibles. */
 function generador(semilla: number) {
@@ -65,7 +69,7 @@ const NOMBRES_CLIENTE = [
 ];
 const ZONAS: ZonaDomicilio[] = ['Centro', 'Chapinero', 'Norte', 'Sur', 'Occidente'];
 
-function entradaPedidoDemo(i: number, fecha: string): EntradaPedido {
+function entradaPedidoDemo(i: number, fecha: string, sedeId: string): EntradaPedido {
   const rnd = generador(1000 + i);
   const nLineas = 1 + Math.floor(rnd() * 3);
   const indices = new Set<number>();
@@ -92,17 +96,20 @@ function entradaPedidoDemo(i: number, fecha: string): EntradaPedido {
       canal === 'Plataforma' ? 'Plataforma' : i % 2 === 0 ? 'Efectivo' : 'Transferencia',
     lineas,
     fecha,
+    sedeId,
   };
 }
 
 /**
  * Construye el estado inicial de la demostración: apertura, inversión en equipo,
  * ~2 semanas de ventas, compras de reposición, gastos, nómina quincenal y una
- * semana de domicilios. Todo pasa por los mismos `aplicar*` que usa el reducer,
- * así los folios y asientos quedan encadenados igual que en la operación real.
+ * semana de domicilios, repartidos entre las dos sedes. Todo pasa por los mismos
+ * `aplicar*` que usa el reducer, así los folios y asientos quedan encadenados
+ * igual que en la operación real.
  */
 export function construirEstadoInicial(): EstadoApp {
   let estado: EstadoApp = {
+    sedes: sedesIniciales,
     cuentas: catalogoCuentas,
     productos: catalogoProductos,
     empleados: empleadosIniciales,
@@ -117,9 +124,10 @@ export function construirEstadoInicial(): EstadoApp {
     mesas: mesasIniciales,
     reservas: [],
     sesiones: [],
+    eventos: eventosIniciales,
   };
 
-  // Apertura y montaje del negocio.
+  // Apertura y montaje del negocio: inversión compartida entre las dos sedes.
   estado = aplicarAsientoManual(estado, {
     fecha: '2026-08-24',
     origen: 'apertura',
@@ -133,7 +141,7 @@ export function construirEstadoInicial(): EstadoApp {
   estado = aplicarAsientoManual(estado, {
     fecha: INICIO_OPERACION,
     origen: 'apertura',
-    descripcion: 'Compra de plancha, freidora y línea fría de contado',
+    descripcion: 'Compra de plancha, freidora y línea fría de contado (ambas sedes)',
     detalles: [
       { cuenta_id: CTA.EQUIPO, debito: 9500000, credito: 0 },
       { cuenta_id: CTA.BANCOS, debito: 0, credito: 9500000 },
@@ -149,7 +157,8 @@ export function construirEstadoInicial(): EstadoApp {
     ],
   });
 
-  // 14 días de operación, tres ventas (turnos) por día.
+  // 14 días de operación, tres ventas (turnos) por día. Los dos primeros turnos
+  // se atienden en la Sede Centro y el tercero en la Sede Norte.
   for (let dia = 0; dia < 14; dia += 1) {
     const fecha = sumaISO('2026-08-26', dia);
     for (let turno = 0; turno < 3; turno += 1) {
@@ -157,6 +166,7 @@ export function construirEstadoInicial(): EstadoApp {
         fecha,
         formaPago: (dia + turno) % 2 === 0 ? 'Efectivo' : 'Transferencia',
         lineas: canastaDelDia(dia, turno),
+        sedeId: turno === 2 ? NORTE : CENTRO,
       });
     }
   }
@@ -169,6 +179,7 @@ export function construirEstadoInicial(): EstadoApp {
     monto: 3600000,
     destino: 'Inventario',
     formaPago: 'Crédito',
+    sedeId: CENTRO,
   });
   estado = aplicarCompra(estado, {
     fecha: '2026-09-04',
@@ -177,6 +188,7 @@ export function construirEstadoInicial(): EstadoApp {
     monto: 4200000,
     destino: 'Inventario',
     formaPago: 'Transferencia',
+    sedeId: NORTE,
   });
   estado = aplicarCompra(estado, {
     fecha: '2026-09-02',
@@ -186,9 +198,10 @@ export function construirEstadoInicial(): EstadoApp {
     destino: 'Gasto',
     categoriaGasto: 'Mantenimiento',
     formaPago: 'Efectivo',
+    sedeId: CENTRO,
   });
 
-  // Abono parcial a proveedores.
+  // Abono parcial a proveedores (compartido).
   estado = aplicarAsientoManual(estado, {
     fecha: '2026-09-05',
     origen: 'compra',
@@ -206,6 +219,7 @@ export function construirEstadoInicial(): EstadoApp {
     concepto: 'Pauta en redes y volantes de apertura',
     monto: 650000,
     formaPago: 'Transferencia',
+    sedeId: CENTRO,
   });
   estado = aplicarGasto(estado, {
     fecha: '2026-09-01',
@@ -213,6 +227,7 @@ export function construirEstadoInicial(): EstadoApp {
     concepto: 'Canon del local comercial',
     monto: 3400000,
     formaPago: 'Transferencia',
+    sedeId: CENTRO,
   });
   estado = aplicarGasto(estado, {
     fecha: '2026-09-03',
@@ -220,23 +235,31 @@ export function construirEstadoInicial(): EstadoApp {
     concepto: 'Energía, agua e internet',
     monto: 920000,
     formaPago: 'Transferencia',
+    sedeId: NORTE,
   });
 
-  // Nómina de la primera quincena.
-  estado = aplicarNomina(estado, {
-    fecha: '2026-08-31',
-    periodo: '16–31 de agosto de 2026',
-    empleadoIds: empleadosIniciales.filter((e) => e.activo).map((e) => e.id),
-  });
+  // Nómina de la primera quincena, corrida por separado en cada sede.
+  for (const sedeId of [CENTRO, NORTE]) {
+    estado = aplicarNomina(estado, {
+      fecha: '2026-08-31',
+      periodo: '16–31 de agosto de 2026',
+      empleadoIds: empleadosIniciales
+        .filter((e) => e.activo && e.sedeId === sedeId)
+        .map((e) => e.id),
+      sedeId,
+    });
+  }
 
-  // Domicilios: última semana, 3 pedidos por día. Los de días anteriores quedan
-  // entregados; los de hoy quedan en distintas etapas para el tablero.
+  // Domicilios: última semana, 3 pedidos por día (2 desde Centro, 1 desde Norte).
+  // Los de días anteriores quedan entregados; los de hoy quedan en distintas
+  // etapas para el tablero.
   let contadorPedido = 0;
   for (let dia = 8; dia < 14; dia += 1) {
     const fecha = sumaISO('2026-08-26', dia);
     const esHoy = dia === 13;
     for (let k = 0; k < 3; k += 1) {
-      estado = aplicarNuevoPedido(estado, entradaPedidoDemo(contadorPedido, fecha));
+      const sedeId = k === 2 ? NORTE : CENTRO;
+      estado = aplicarNuevoPedido(estado, entradaPedidoDemo(contadorPedido, fecha, sedeId));
       const idPedido = estado.pedidos[estado.pedidos.length - 1].id;
       contadorPedido += 1;
 
@@ -254,8 +277,9 @@ export function construirEstadoInicial(): EstadoApp {
     }
   }
 
-  // Se liquida una plataforma para mostrar el cobro; la otra queda por cobrar.
-  estado = aplicarLiquidacionPlataforma(estado, 'plat-didi');
+  // Se liquida una plataforma en cada sede para mostrar el cobro; la otra queda por cobrar.
+  estado = aplicarLiquidacionPlataforma(estado, 'plat-didi', CENTRO);
+  estado = aplicarLiquidacionPlataforma(estado, 'plat-didi', NORTE);
 
   // --- Salón: reservas del día y ocupación de mesas ---------------
   estado = sembrarSalon(estado);
@@ -267,6 +291,8 @@ export function construirEstadoInicial(): EstadoApp {
  * Agenda de reservas de hoy en distintos estados y unas cuantas mesas ocupadas
  * (dos walk-in, una reserva sentada y un almuerzo ya cerrado que deja la mesa
  * por limpiar), para que el tablero y el modelo 3D arranquen con movimiento.
+ * Todo se siembra en la Sede Centro (folios M-xx); la Sede Norte (folios N-xx)
+ * arranca con su salón libre para probar el cambio de sede desde cero.
  */
 function sembrarSalon(estadoBase: EstadoApp): EstadoApp {
   let estado = estadoBase;
@@ -275,15 +301,15 @@ function sembrarSalon(estadoBase: EstadoApp): EstadoApp {
   const ultimaSesion = () => estado.sesiones[estado.sesiones.length - 1].id;
 
   // Reservas de hoy.
-  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '12:45', cliente: 'Almuerzo Prado', telefono: '310 2233445', personas: 4, zona: 'Salón', mesaId: 'M-03' }); // R-0001
-  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '20:00', cliente: 'Familia Ochoa', telefono: '311 9988776', personas: 6, zona: 'Salón', mesaId: 'M-06', notas: 'Cumpleaños, llevan torta' }); // R-0002
-  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '20:30', cliente: 'Grupo Herrera', telefono: '300 1212121', personas: 8, zona: 'Privado', mesaId: 'M-15' }); // R-0003
-  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '21:00', cliente: 'Nicolás Pardo', telefono: '315 4455667', personas: 2, zona: 'Terraza' }); // R-0004
-  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '19:00', cliente: 'Mesa Torres', telefono: '312 7766554', personas: 3 }); // R-0005
-  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '19:30', cliente: 'Cena Villa', telefono: '318 3344556', personas: 4, zona: 'Salón' }); // R-0006
+  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '12:45', cliente: 'Almuerzo Prado', telefono: '310 2233445', personas: 4, zona: 'Salón', mesaId: 'M-03', sedeId: CENTRO }); // R-0001
+  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '20:00', cliente: 'Familia Ochoa', telefono: '311 9988776', personas: 6, zona: 'Salón', mesaId: 'M-06', notas: 'Cumpleaños, llevan torta', sedeId: CENTRO }); // R-0002
+  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '20:30', cliente: 'Grupo Herrera', telefono: '300 1212121', personas: 8, zona: 'Privado', mesaId: 'M-15', sedeId: CENTRO }); // R-0003
+  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '21:00', cliente: 'Nicolás Pardo', telefono: '315 4455667', personas: 2, zona: 'Terraza', sedeId: CENTRO }); // R-0004
+  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '19:00', cliente: 'Mesa Torres', telefono: '312 7766554', personas: 3, sedeId: CENTRO }); // R-0005
+  estado = aplicarNuevaReserva(estado, { fecha: hoy, hora: '19:30', cliente: 'Cena Villa', telefono: '318 3344556', personas: 4, zona: 'Salón', sedeId: CENTRO }); // R-0006
   // Próximos días.
-  estado = aplicarNuevaReserva(estado, { fecha: manana, hora: '13:00', cliente: 'Oficina Delta', telefono: '301 5566778', personas: 10, zona: 'Privado', mesaId: 'M-15' });
-  estado = aplicarNuevaReserva(estado, { fecha: manana, hora: '20:00', cliente: 'Aniversario Ríos', telefono: '311 2020202', personas: 2, zona: 'Terraza' });
+  estado = aplicarNuevaReserva(estado, { fecha: manana, hora: '13:00', cliente: 'Oficina Delta', telefono: '301 5566778', personas: 10, zona: 'Privado', mesaId: 'M-15', sedeId: CENTRO });
+  estado = aplicarNuevaReserva(estado, { fecha: manana, hora: '20:00', cliente: 'Aniversario Ríos', telefono: '311 2020202', personas: 2, zona: 'Terraza', sedeId: CENTRO });
 
   estado = aplicarEstadoReserva(estado, 'R-0002', 'Confirmada');
   estado = aplicarEstadoReserva(estado, 'R-0003', 'Confirmada');

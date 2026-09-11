@@ -3,6 +3,7 @@ import { Armchair, Minus, MousePointerClick, Plus, Trash2 } from 'lucide-react';
 import { useTienda } from '../store/tienda';
 import { ZONAS_SALON, CLASE_ESTADO_MESA, COLOR_ESTADO_MESA } from '../data/salon';
 import { formatoMoneda, hoyISO } from '../lib/contabilidad';
+import { filtrarPorSede, sedeParaOperar, TODAS_SEDES } from '../lib/sedes';
 import {
   indicadoresSalon,
   minutosTranscurridos,
@@ -17,8 +18,17 @@ import { Boton, Campo, EstadoVacio, Kpi, Panel, Selector } from '../components/u
 const ESTADOS: EstadoMesa[] = ['Libre', 'Ocupada', 'Reservada', 'Por limpiar'];
 
 export function Mesas() {
-  const { estado } = useTienda();
+  const { estado, sedeActual } = useTienda();
   const [sel, setSel] = useState<string | null>(null);
+
+  // El salón es un plano físico de una sola sede: si la vista global está en
+  // "todas las sedes" se elige localmente cuál salón mostrar.
+  const [sedeSalonLocal, setSedeSalonLocal] = useState(sedeParaOperar(sedeActual, estado.sedes));
+  useEffect(() => {
+    setSedeSalonLocal(sedeParaOperar(sedeActual, estado.sedes));
+  }, [sedeActual, estado.sedes]);
+  const sedeSalon = sedeActual !== TODAS_SEDES ? sedeActual : sedeSalonLocal;
+  const vista = useMemo(() => filtrarPorSede(estado, sedeSalon), [estado, sedeSalon]);
 
   // Refresca los "minutos en mesa" aunque no haya despachos.
   const [, setTick] = useState(0);
@@ -28,21 +38,41 @@ export function Mesas() {
   }, []);
 
   const hoy = hoyISO();
-  const vistas = useMemo(() => vistaSalon(estado, hoy), [estado, hoy]);
-  const ind = useMemo(() => indicadoresSalon(estado, hoy), [estado, hoy]);
+  const vistas = useMemo(() => vistaSalon(vista, hoy), [vista, hoy]);
+  const ind = useMemo(() => indicadoresSalon(vista, hoy), [vista, hoy]);
   const seleccionada = sel ? vistas.find((v) => v.mesa.id === sel) ?? null : null;
 
   const cerradasHoy = useMemo(
     () =>
-      estado.sesiones
+      vista.sesiones
         .filter((s) => s.estado === 'Cerrada' && s.fecha === hoy)
         .slice()
         .reverse(),
-    [estado.sesiones, hoy],
+    [vista.sesiones, hoy],
   );
 
   return (
     <div className="space-y-4">
+      {sedeActual === TODAS_SEDES && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-paper/60 px-4 py-2.5 text-sm">
+          <span className="text-muted">Viendo el salón de:</span>
+          <Selector
+            value={sedeSalonLocal}
+            onChange={(e) => setSedeSalonLocal(e.target.value)}
+            className="!py-1 text-xs"
+          >
+            {estado.sedes.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nombre}
+              </option>
+            ))}
+          </Selector>
+          <span className="text-xs text-muted">
+            (con "Todas las sedes" el salón se muestra de una en una)
+          </span>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-4 lg:grid-cols-8">
         <Kpi etiqueta="Libres" valor={String(ind.libres)} tono="ingreso" />
         <Kpi etiqueta="Ocupadas" valor={String(ind.ocupadas)} tono="egreso" />
@@ -69,7 +99,7 @@ export function Mesas() {
       <div className="grid gap-4 lg:grid-cols-[1.7fr_1fr]">
         <Panel titulo="Salón en 3D" descripcion="Orbita con el mouse. Toca una mesa para gestionarla." sinPadding>
           <div className="h-[360px] sm:h-[440px] lg:h-[520px]">
-            <Salon3D mesas={vistas} seleccionada={sel} onSelect={setSel} />
+            <Salon3D key={sedeSalon} mesas={vistas} seleccionada={sel} onSelect={setSel} />
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 border-t border-line px-4 py-2.5 text-xs text-muted">
             {ESTADOS.map((e) => (
@@ -161,7 +191,7 @@ export function Mesas() {
               </thead>
               <tbody>
                 {cerradasHoy.map((s) => {
-                  const mesa = estado.mesas.find((m) => m.id === s.mesaId);
+                  const mesa = vista.mesas.find((m) => m.id === s.mesaId);
                   return (
                     <tr key={s.id} className="border-b border-line/70">
                       <td className="py-2.5 pl-4 pr-2 font-mono text-xs text-muted">{s.id}</td>
@@ -216,9 +246,17 @@ function PanelMesa({ vista }: { vista: MesaVista }) {
   );
 }
 
-function SelectorMesero({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function SelectorMesero({
+  value,
+  onChange,
+  sedeId,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  sedeId: string;
+}) {
   const { estado } = useTienda();
-  const meseros = estado.empleados.filter((e) => e.activo);
+  const meseros = estado.empleados.filter((e) => e.activo && e.sedeId === sedeId);
   return (
     <Selector value={value} onChange={(e) => onChange(e.target.value)}>
       {meseros.map((e) => (
@@ -232,8 +270,8 @@ function SelectorMesero({ value, onChange }: { value: string; onChange: (v: stri
 
 function MesaLibre({ mesaId }: { mesaId: string }) {
   const { estado, dispatch } = useTienda();
-  const meseros = estado.empleados.filter((e) => e.activo);
   const mesa = estado.mesas.find((m) => m.id === mesaId)!;
+  const meseros = estado.empleados.filter((e) => e.activo && e.sedeId === mesa.sedeId);
   const [comensales, setComensales] = useState(String(Math.min(2, mesa.capacidad)));
   const [mesero, setMesero] = useState(meseros[0]?.nombre ?? '');
 
@@ -258,7 +296,7 @@ function MesaLibre({ mesaId }: { mesaId: string }) {
           />
         </Campo>
         <Campo etiqueta="Mesero">
-          <SelectorMesero value={mesero} onChange={setMesero} />
+          <SelectorMesero value={mesero} onChange={setMesero} sedeId={mesa.sedeId} />
         </Campo>
       </div>
       <Boton type="button" onClick={abrir} className="w-full">
@@ -272,7 +310,7 @@ function MesaLibre({ mesaId }: { mesaId: string }) {
 function MesaReservada({ vista }: { vista: MesaVista }) {
   const { estado, dispatch } = useTienda();
   const reserva = vista.reserva!;
-  const meseros = estado.empleados.filter((e) => e.activo);
+  const meseros = estado.empleados.filter((e) => e.activo && e.sedeId === vista.mesa.sedeId);
   const [comensales, setComensales] = useState(String(reserva.personas));
   const [mesero, setMesero] = useState(meseros[0]?.nombre ?? '');
 
@@ -309,7 +347,7 @@ function MesaReservada({ vista }: { vista: MesaVista }) {
           />
         </Campo>
         <Campo etiqueta="Mesero">
-          <SelectorMesero value={mesero} onChange={setMesero} />
+          <SelectorMesero value={mesero} onChange={setMesero} sedeId={vista.mesa.sedeId} />
         </Campo>
       </div>
       <Boton type="button" onClick={sentar} className="w-full">

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, X } from 'lucide-react';
 import type {
   CanalDomicilio,
@@ -17,6 +17,7 @@ import {
   pedidosPorZona,
   porCobrarPlataforma,
 } from '../lib/contabilidad';
+import { filtrarPorSede, sedeParaOperar, TODAS_SEDES } from '../lib/sedes';
 import { Boton, Campo, Entrada, EstadoVacio, Etiqueta, Kpi, Panel, Selector } from '../components/ui';
 
 const COLUMNAS: { estado: EstadoPedido; titulo: string; accion: string }[] = [
@@ -26,8 +27,9 @@ const COLUMNAS: { estado: EstadoPedido; titulo: string; accion: string }[] = [
 ];
 
 export function Domicilios() {
-  const { estado, dispatch } = useTienda();
-  const ind = calcularIndicadoresDomicilios(estado);
+  const { estado, dispatch, sedeActual } = useTienda();
+  const vista = useMemo(() => filtrarPorSede(estado, sedeActual), [estado, sedeActual]);
+  const ind = calcularIndicadoresDomicilios(vista);
 
   return (
     <div className="space-y-4">
@@ -43,7 +45,7 @@ export function Domicilios() {
       <FormularioPedido />
 
       <Tablero
-        pedidos={estado.pedidos}
+        pedidos={vista.pedidos}
         onAvanzar={(id) => dispatch({ tipo: 'AVANZAR_PEDIDO', pedidoId: id })}
         onCancelar={(id) => {
           if (window.confirm('¿Cancelar este pedido?')) {
@@ -58,7 +60,7 @@ export function Domicilios() {
         }
       />
 
-      <Entregados pedidos={estado.pedidos} />
+      <Entregados pedidos={vista.pedidos} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Liquidaciones />
@@ -73,7 +75,7 @@ export function Domicilios() {
 // --- Formulario de nuevo pedido -----------------------------------
 
 function FormularioPedido() {
-  const { estado, dispatch } = useTienda();
+  const { estado, dispatch, sedeActual } = useTienda();
 
   const [cliente, setCliente] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -84,6 +86,11 @@ function FormularioPedido() {
   const [plataformaId, setPlataformaId] = useState(estado.plataformas[0]?.id ?? '');
   const [domicilio, setDomicilio] = useState(String(tarifaZona('Centro')));
   const [formaPago, setFormaPago] = useState<FormaPago>('Efectivo');
+  const [sedePedido, setSedePedido] = useState(sedeParaOperar(sedeActual, estado.sedes));
+
+  useEffect(() => {
+    setSedePedido(sedeParaOperar(sedeActual, estado.sedes));
+  }, [sedeActual, estado.sedes]);
 
   const [prodSel, setProdSel] = useState(estado.productos[0]?.id ?? '');
   const [cant, setCant] = useState('1');
@@ -127,7 +134,7 @@ function FormularioPedido() {
     detalle.base + detalle.impuesto + (canal === 'Propio' ? detalle.valorDomicilio : 0);
 
   const crear = () => {
-    if (!cliente.trim() || !direccion.trim() || lineas.length === 0) return;
+    if (!cliente.trim() || !direccion.trim() || lineas.length === 0 || !sedePedido) return;
     dispatch({
       tipo: 'NUEVO_PEDIDO',
       cliente: cliente.trim(),
@@ -140,6 +147,7 @@ function FormularioPedido() {
       domicilio: Number(domicilio) || 0,
       formaPago: canal === 'Plataforma' ? 'Plataforma' : formaPago,
       lineas,
+      sedeId: sedePedido,
     });
     setCliente('');
     setTelefono('');
@@ -218,6 +226,15 @@ function FormularioPedido() {
               </Selector>
             </Campo>
           )}
+          <Campo etiqueta="Sede que despacha">
+            <Selector value={sedePedido} onChange={(e) => setSedePedido(e.target.value)}>
+              {estado.sedes.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre}
+                </option>
+              ))}
+            </Selector>
+          </Campo>
         </div>
 
         <div className="grid content-start gap-3">
@@ -309,7 +326,11 @@ function FormularioPedido() {
             </div>
           </div>
 
-          <Boton type="button" onClick={crear} disabled={lineas.length === 0 || !cliente.trim()}>
+          <Boton
+            type="button"
+            onClick={crear}
+            disabled={lineas.length === 0 || !cliente.trim() || !sedePedido}
+          >
             Crear pedido
           </Boton>
         </div>
@@ -460,7 +481,8 @@ function Entregados({ pedidos }: { pedidos: PedidoDomicilio[] }) {
 // --- Liquidación de plataformas -------------------------------
 
 function Liquidaciones() {
-  const { estado, dispatch } = useTienda();
+  const { estado, dispatch, sedeActual } = useTienda();
+  const vista = useMemo(() => filtrarPorSede(estado, sedeActual), [estado, sedeActual]);
   return (
     <Panel
       titulo="Liquidación de plataformas"
@@ -468,8 +490,8 @@ function Liquidaciones() {
     >
       <ul className="divide-y divide-line">
         {estado.plataformas.map((plat) => {
-          const monto = porCobrarPlataforma(estado, plat.id);
-          const pendientes = estado.pedidos.filter(
+          const monto = porCobrarPlataforma(vista, plat.id);
+          const pendientes = vista.pedidos.filter(
             (p) => p.plataformaId === plat.id && p.estado === 'Entregado' && !p.liquidado,
           ).length;
           return (
@@ -485,7 +507,13 @@ function Liquidaciones() {
                 type="button"
                 variante="secundario"
                 disabled={monto <= 0}
-                onClick={() => dispatch({ tipo: 'LIQUIDAR_PLATAFORMA', plataformaId: plat.id })}
+                onClick={() =>
+                  dispatch({
+                    tipo: 'LIQUIDAR_PLATAFORMA',
+                    plataformaId: plat.id,
+                    sedeId: sedeActual === TODAS_SEDES ? undefined : sedeActual,
+                  })
+                }
                 className="!px-2.5 !py-1.5 text-xs"
               >
                 Liquidar
@@ -501,8 +529,9 @@ function Liquidaciones() {
 // --- Pedidos por zona ----------------------------------------
 
 function PorZona() {
-  const { estado } = useTienda();
-  const filas = pedidosPorZona(estado);
+  const { estado, sedeActual } = useTienda();
+  const vista = useMemo(() => filtrarPorSede(estado, sedeActual), [estado, sedeActual]);
+  const filas = pedidosPorZona(vista);
   const max = Math.max(1, ...filas.map((f) => f.ingreso));
 
   return (
@@ -536,7 +565,8 @@ function PorZona() {
 // --- Domiciliarios -----------------------------------------
 
 function Domiciliarios() {
-  const { estado, dispatch } = useTienda();
+  const { estado, dispatch, sedeActual } = useTienda();
+  const vista = useMemo(() => filtrarPorSede(estado, sedeActual), [estado, sedeActual]);
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
   const [tarifa, setTarifa] = useState('3500');
@@ -570,7 +600,7 @@ function Domiciliarios() {
             </thead>
             <tbody>
               {estado.domiciliarios.map((x) => {
-                const entregas = estado.pedidos.filter(
+                const entregas = vista.pedidos.filter(
                   (p) => p.domiciliarioId === x.id && p.estado === 'Entregado',
                 ).length;
                 return (

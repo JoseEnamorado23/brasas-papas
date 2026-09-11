@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Minus, Plus, Search, Trash2 } from 'lucide-react';
 import type { CategoriaProducto, FormaPago } from '../types';
 import { useTienda } from '../store/tienda';
 import { IMPUESTO_CONSUMO } from '../data/cuentas';
 import { CATEGORIAS_PRODUCTO, detalleCombo } from '../data/menu';
 import { formatoMoneda } from '../lib/contabilidad';
+import { filtrarPorSede, sedeParaOperar } from '../lib/sedes';
 import { AsientoBloque } from '../components/AsientoBloque';
-import { Boton, EstadoVacio, Panel } from '../components/ui';
+import { Boton, Campo, EstadoVacio, Panel, Selector } from '../components/ui';
 
 type Carrito = Record<string, number>;
 type FiltroCategoria = 'Todos' | CategoriaProducto;
@@ -17,12 +18,18 @@ const normalizar = (texto: string) =>
   texto.normalize('NFD').replace(RANGO_DIACRITICOS, '').toLowerCase();
 
 export function PuntoDeVenta() {
-  const { estado, dispatch } = useTienda();
+  const { estado, dispatch, sedeActual } = useTienda();
+  const vista = useMemo(() => filtrarPorSede(estado, sedeActual), [estado, sedeActual]);
   const [carrito, setCarrito] = useState<Carrito>({});
   const [formaPago, setFormaPago] = useState<FormaPago>('Efectivo');
+  const [sedeVenta, setSedeVenta] = useState(sedeParaOperar(sedeActual, estado.sedes));
   const [ultimaVentaId, setUltimaVentaId] = useState<string | null>(null);
   const [categoria, setCategoria] = useState<FiltroCategoria>('Todos');
   const [busqueda, setBusqueda] = useState('');
+
+  useEffect(() => {
+    setSedeVenta(sedeParaOperar(sedeActual, estado.sedes));
+  }, [sedeActual, estado.sedes]);
 
   const cambiar = (id: string, delta: number) =>
     setCarrito((prev) => {
@@ -67,10 +74,11 @@ export function PuntoDeVenta() {
   const total = base + impuesto;
 
   const registrar = () => {
-    if (lineas.length === 0) return;
+    if (lineas.length === 0 || !sedeVenta) return;
     dispatch({
       tipo: 'VENTA',
       formaPago,
+      sedeId: sedeVenta,
       lineas: lineas.map((l) => ({ productoId: l.producto.id, cantidad: l.cantidad })),
     });
     setUltimaVentaId(`V-${String(estado.ventas.length + 1).padStart(4, '0')}`);
@@ -262,10 +270,22 @@ export function PuntoDeVenta() {
               ))}
             </div>
 
+            <div className="mt-3">
+              <Campo etiqueta="Sede">
+                <Selector value={sedeVenta} onChange={(e) => setSedeVenta(e.target.value)}>
+                  {estado.sedes.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.nombre}
+                    </option>
+                  ))}
+                </Selector>
+              </Campo>
+            </div>
+
             <Boton
               type="button"
               onClick={registrar}
-              disabled={lineas.length === 0}
+              disabled={lineas.length === 0 || !sedeVenta}
               className="mt-3 w-full"
             >
               Registrar venta
@@ -281,11 +301,11 @@ export function PuntoDeVenta() {
         )}
 
         <Panel titulo="Últimas ventas">
-          {estado.ventas.length === 0 ? (
+          {vista.ventas.length === 0 ? (
             <EstadoVacio>Sin ventas registradas todavía.</EstadoVacio>
           ) : (
             <ul className="divide-y divide-line text-sm">
-              {estado.ventas
+              {vista.ventas
                 .slice(-4)
                 .reverse()
                 .map((venta) => (

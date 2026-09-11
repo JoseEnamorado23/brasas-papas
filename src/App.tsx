@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Library,
   Menu,
+  PartyPopper,
   RotateCcw,
   ShoppingBag,
   Store,
@@ -16,6 +17,7 @@ import {
 import { MenuMovil, Sidebar, type ItemNav } from './components/Sidebar';
 import { TiendaProvider, useTienda } from './store/tienda';
 import { calcularIndicadores, formatoMoneda } from './lib/contabilidad';
+import { filtrarPorSede } from './lib/sedes';
 import { PuntoDeVenta } from './views/PuntoDeVenta';
 import { Ventas } from './views/Ventas';
 import { Reservas } from './views/Reservas';
@@ -26,6 +28,7 @@ import { Empleados } from './views/Empleados';
 import { LibroDiario } from './views/LibroDiario';
 import { LibroMayor } from './views/LibroMayor';
 import { Dashboard } from './views/Dashboard';
+import { Eventos } from './views/Eventos';
 
 type Vista =
   | 'venta'
@@ -35,6 +38,7 @@ type Vista =
   | 'domicilios'
   | 'compras'
   | 'empleados'
+  | 'eventos'
   | 'diario'
   | 'mayor'
   | 'dashboard';
@@ -47,6 +51,7 @@ const NAV: Array<ItemNav & { id: Vista; titulo: string }> = [
   { id: 'domicilios', label: 'Domicilios', titulo: 'Domicilios', icon: Bike },
   { id: 'compras', label: 'Compras y gastos', titulo: 'Compras y gastos', icon: Truck },
   { id: 'empleados', label: 'Empleados', titulo: 'Empleados y nómina', icon: Users },
+  { id: 'eventos', label: 'Eventos y catering', titulo: 'Eventos y catering', icon: PartyPopper },
   { id: 'diario', label: 'Libro diario', titulo: 'Libro diario', icon: BookOpenText },
   { id: 'mayor', label: 'Libro mayor', titulo: 'Libro mayor y balance de comprobación', icon: Library },
   { id: 'dashboard', label: 'Dashboard', titulo: 'Dashboard financiero', icon: LayoutDashboard },
@@ -55,12 +60,12 @@ const NAV: Array<ItemNav & { id: Vista; titulo: string }> = [
 const fechaLarga = new Intl.DateTimeFormat('es-CO', { dateStyle: 'long' });
 
 function Aplicacion() {
-  const { estado, dispatch } = useTienda();
+  const { estado, dispatch, sedeActual, setSedeActual } = useTienda();
   const [vista, setVista] = useState<Vista>('venta');
   const [menuAbierto, setMenuAbierto] = useState(false);
 
   const vistaActiva = NAV.find((item) => item.id === vista)!;
-  const { efectivoDisponible } = calcularIndicadores(estado);
+  const { efectivoDisponible } = calcularIndicadores(filtrarPorSede(estado, sedeActual));
 
   // Con el menú móvil abierto: bloquea el scroll de fondo, cierra al pasar a
   // escritorio y responde a la tecla Escape.
@@ -117,7 +122,14 @@ function Aplicacion() {
 
   return (
     <div className="mx-auto flex min-h-full max-w-[1240px] flex-col md:h-screen md:flex-row">
-      <Sidebar items={NAV} activo={vista} onSelect={seleccionar} />
+      <Sidebar
+        items={NAV}
+        activo={vista}
+        onSelect={seleccionar}
+        sedes={estado.sedes}
+        sedeActual={sedeActual}
+        onCambiarSede={setSedeActual}
+      />
 
       <MenuMovil
         items={NAV}
@@ -125,6 +137,9 @@ function Aplicacion() {
         onSelect={seleccionar}
         abierto={menuAbierto}
         onCerrar={() => setMenuAbierto(false)}
+        sedes={estado.sedes}
+        sedeActual={sedeActual}
+        onCambiarSede={setSedeActual}
         pie={
           <div className="space-y-2">
             <div className="flex items-center justify-between rounded-md border border-line px-3 py-2 text-sm">
@@ -175,6 +190,7 @@ function Aplicacion() {
           {vista === 'domicilios' && <Domicilios />}
           {vista === 'compras' && <ComprasGastos />}
           {vista === 'empleados' && <Empleados />}
+          {vista === 'eventos' && <Eventos />}
           {vista === 'diario' && <LibroDiario />}
           {vista === 'mayor' && <LibroMayor />}
           {vista === 'dashboard' && <Dashboard />}
