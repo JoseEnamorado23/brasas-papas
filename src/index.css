@@ -43,3 +43,24 @@ body {
     animation: aparecer 0.24s ease-out;
   }
 }
+
+/* Impresión: solo se imprime el bloque marcado (tiquete, factura o comanda). */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .imprimible,
+  .imprimible * {
+    visibility: visible;
+  }
+  .imprimible {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    box-shadow: none !important;
+    border: 0 !important;
+  }
+  .no-imprimir {
+    display: none !important;
+  }
+}

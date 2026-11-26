@@ -1,18 +1,16 @@
 import type { Sede } from '../types';
 
-export const TODAS_SEDES = 'todas';
+/**
+ * El restaurante opera en un solo local. El modelo conserva `sedeId` en cada
+ * registro, así que abrir una segunda sede más adelante no exige migrar datos.
+ */
+export const SEDE_PRINCIPAL = 'sede-monteria';
 
 export const sedesIniciales: Sede[] = [
   {
-    id: 'sede-centro',
-    nombre: 'Sede Centro',
-    direccion: 'Carrera 7 # 14-32, Centro',
-    telefono: '601 4567890',
-  },
-  {
-    id: 'sede-norte',
-    nombre: 'Sede Norte',
-    direccion: 'Calle 116 # 19-45, Norte',
-    telefono: '601 7891234',
+    id: SEDE_PRINCIPAL,
+    nombre: 'Don Chorizo Montería',
+    direccion: 'Carrera 6 # 29-40, Centro, Montería, Córdoba',
+    telefono: '604 789 1234',
   },
 ];

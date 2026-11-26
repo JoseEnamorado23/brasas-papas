@@ -1,6 +1,7 @@
 import type {
   Asiento,
   CanalDomicilio,
+  CanalVenta,
   CategoriaGasto,
   Compra,
   DestinoCompra,
@@ -13,6 +14,7 @@ import type {
   Gasto,
   LineaNomina,
   LineaVenta,
+  MedioPago,
   OrigenAsiento,
   PagoNomina,
   PedidoDomicilio,
@@ -26,7 +28,16 @@ import {
   cuentaCaja,
   cuentaPorCategoriaGasto,
 } from '../data/cuentas';
+import { CONSUMIDOR_FINAL } from '../data/facturacion';
 import { folio, hoyISO } from './formato';
+import { emitirFactura, resumenFormaPago, type DatosCobro } from './facturacion';
+import {
+  aplicarAnularLinea,
+  crearComanda,
+  entregarComandasDe,
+  type LineaPedida,
+} from './comandas';
+import { aplicarCerrarMesa } from './salon';
 
 const d = (cuenta_id: number, debito: number, credito: number): DetalleAsiento => ({
   cuenta_id,
@@ -51,18 +62,20 @@ export function aplicarAsientoManual(
 
 // --- Venta ---------------------------------------------------------------
 
-export interface EntradaVenta {
-  lineas: { productoId: string; cantidad: number }[];
-  formaPago: FormaPago;
+interface EntradaRegistro {
+  lineas: LineaVenta[];
+  canal: CanalVenta;
+  cobro: DatosCobro;
   sedeId: string;
-  fecha?: string;
+  fecha: string;
+  descripcion: (ventaId: string) => string;
+  sesionId?: string;
+  referencia?: string;
+  atendio?: string;
 }
 
-export function aplicarVenta(estado: EstadoApp, entrada: EntradaVenta): EstadoApp {
-  if (!entrada.sedeId) return estado;
-  const fecha = entrada.fecha ?? hoyISO();
-
-  const lineas: LineaVenta[] = entrada.lineas
+const lineasDeVenta = (estado: EstadoApp, pedidas: LineaPedida[]): LineaVenta[] =>
+  pedidas
     .map(({ productoId, cantidad }) => {
       const producto = estado.productos.find((p) => p.id === productoId);
       if (!producto || cantidad <= 0) return null;
@@ -76,25 +89,44 @@ export function aplicarVenta(estado: EstadoApp, entrada: EntradaVenta): EstadoAp
     })
     .filter((l): l is LineaVenta => l !== null);
 
-  if (lineas.length === 0) return estado;
+/**
+ * Núcleo de toda venta cobrada en caja (mesa o mostrador): crea la venta, su
+ * asiento compuesto y el documento electrónico. Los pagos deben sumar el total
+ * más la propina; si no cuadran, no se registra nada.
+ */
+function registrarVenta(estado: EstadoApp, entrada: EntradaRegistro): EstadoApp {
+  const { lineas, cobro } = entrada;
+  if (!entrada.sedeId || lineas.length === 0) return estado;
 
   const base = lineas.reduce((s, l) => s + l.precioUnit * l.cantidad, 0);
   const impuesto = Math.round(base * IMPUESTO_CONSUMO);
   const total = base + impuesto;
+  const propina = Math.max(0, Math.round(cobro.propina));
   const costo = lineas.reduce((s, l) => s + l.costoUnit * l.cantidad, 0);
+  const pagos = cobro.pagos.filter((p) => p.monto > 0);
+  const pagado = pagos.reduce((s, p) => s + p.monto, 0);
+  if (pagos.length === 0 || pagado !== total + propina) return estado;
 
   const ventaId = folio('V', estado.ventas.length);
 
+  // Un débito por cuenta de destino: efectivo a caja, el resto a bancos.
+  const porCuenta = new Map<number, number>();
+  for (const p of pagos) {
+    const cta = cuentaCaja(p.medio);
+    porCuenta.set(cta, (porCuenta.get(cta) ?? 0) + p.monto);
+  }
+
   const asiento = nuevoAsiento(estado, {
-    fecha,
-    descripcion: `Venta ${ventaId} en punto de venta (${entrada.formaPago.toLowerCase()})`,
+    fecha: entrada.fecha,
+    descripcion: entrada.descripcion(ventaId),
     origen: 'venta',
     referencia: ventaId,
     sedeId: entrada.sedeId,
     detalles: [
-      d(cuentaCaja(entrada.formaPago), total, 0),
+      ...[...porCuenta].map(([cta, monto]) => d(cta, monto, 0)),
       d(CTA.INGRESOS, 0, base),
       d(CTA.IMPUESTO_CONSUMO, 0, impuesto),
+      ...(propina > 0 ? [d(CTA.PROPINAS, 0, propina)] : []),
       d(CTA.COSTO_VENTAS, costo, 0),
       d(CTA.INVENTARIO, 0, costo),
     ],
@@ -102,23 +134,127 @@ export function aplicarVenta(estado: EstadoApp, entrada: EntradaVenta): EstadoAp
 
   const venta: Venta = {
     id: ventaId,
-    fecha,
+    fecha: entrada.fecha,
     lineas,
     base,
     impuesto,
     total,
     costo,
-    formaPago: entrada.formaPago,
-    canal: 'Mostrador',
+    formaPago: resumenFormaPago(pagos),
+    pagos,
+    propina,
+    canal: entrada.canal,
     domicilio: 0,
+    sesionId: entrada.sesionId,
     asientoId: asiento.id,
     sedeId: entrada.sedeId,
   };
 
+  return emitirFactura(
+    { ...estado, ventas: [...estado.ventas, venta], asientos: [...estado.asientos, asiento] },
+    {
+      venta,
+      documento: cobro.documento,
+      cliente: cobro.cliente,
+      pagos,
+      referencia: entrada.referencia,
+      atendio: entrada.atendio,
+    },
+  );
+}
+
+export interface EntradaVenta {
+  lineas: LineaPedida[];
+  /** Cobro armado en caja. Si falta, se cobra todo con `formaPago` y tiquete POS. */
+  cobro?: DatosCobro;
+  formaPago?: MedioPago;
+  sedeId: string;
+  fecha?: string;
+  /** Venta de mostrador o para llevar: además de cobrarse, se envía a la cocina. */
+  enviarCocina?: boolean;
+  /** Solo para el histórico precargado: ventas de mesa ya cerradas. */
+  canal?: Extract<CanalVenta, 'Mostrador' | 'Mesa'>;
+  referencia?: string;
+  atendio?: string;
+}
+
+export function aplicarVenta(estado: EstadoApp, entrada: EntradaVenta): EstadoApp {
+  const lineas = lineasDeVenta(estado, entrada.lineas);
+  if (lineas.length === 0) return estado;
+  const base = lineas.reduce((s, l) => s + l.precioUnit * l.cantidad, 0);
+  const cobro: DatosCobro = entrada.cobro ?? {
+    documento: 'POS',
+    propina: 0,
+    pagos: [
+      {
+        medio: entrada.formaPago ?? 'Efectivo',
+        monto: base + Math.round(base * IMPUESTO_CONSUMO),
+      },
+    ],
+  };
+  const forma = resumenFormaPago(cobro.pagos).toLowerCase();
+
+  const despues = registrarVenta(estado, {
+    lineas,
+    canal: entrada.canal ?? 'Mostrador',
+    cobro,
+    sedeId: entrada.sedeId,
+    fecha: entrada.fecha ?? hoyISO(),
+    descripcion: (id) =>
+      `Venta ${id} · ${entrada.referencia ?? 'mostrador'} (${forma})`,
+    referencia: entrada.referencia ?? 'Mostrador',
+    atendio: entrada.atendio,
+  });
+  if (despues === estado || !entrada.enviarCocina) return despues;
+
+  const venta = despues.ventas[despues.ventas.length - 1];
+  return crearComanda(despues, {
+    origen: 'Mostrador',
+    referencia: venta.id,
+    etiqueta: `Para llevar · ${venta.id}`,
+    captura: 'Caja',
+    lineas: entrada.lineas,
+    sedeId: entrada.sedeId,
+  });
+}
+
+/**
+ * Cobra la cuenta de una mesa: genera la venta, el asiento y el documento
+ * electrónico, despacha lo que quedara en cocina y deja la mesa por limpiar.
+ */
+export function aplicarCobrarMesa(
+  estado: EstadoApp,
+  sesionId: string,
+  cobro: DatosCobro,
+): EstadoApp {
+  const sesion = estado.sesiones.find((s) => s.id === sesionId);
+  if (!sesion || sesion.estado !== 'Abierta' || sesion.consumo.length === 0) return estado;
+  const nombreMesa = estado.mesas.find((m) => m.id === sesion.mesaId)?.nombre ?? sesion.mesaId;
+  const forma = resumenFormaPago(cobro.pagos).toLowerCase();
+
+  const lineas = lineasDeVenta(
+    estado,
+    sesion.consumo.map((l) => ({ productoId: l.productoId, cantidad: l.cantidad })),
+  );
+
+  const despues = registrarVenta(estado, {
+    lineas,
+    canal: 'Mesa',
+    cobro,
+    sedeId: sesion.sedeId,
+    fecha: hoyISO(),
+    descripcion: (id) => `Venta ${id} · ${nombreMesa} (${forma})`,
+    sesionId,
+    referencia: nombreMesa,
+    atendio: sesion.mesero,
+  });
+  if (despues === estado) return estado;
+
+  const ventaId = despues.ventas[despues.ventas.length - 1].id;
+  const cerrado = aplicarCerrarMesa(entregarComandasDe(despues, sesionId), sesionId);
   return {
-    ...estado,
-    ventas: [...estado.ventas, venta],
-    asientos: [...estado.asientos, asiento],
+    ...cerrado,
+    sesiones: cerrado.sesiones.map((s) => (s.id === sesionId ? { ...s, ventaId } : s)),
   };
 }
 
@@ -393,7 +529,7 @@ function entregarPedido(estado: EstadoApp, pedido: PedidoDomicilio): EstadoApp {
   let domicilioVenta: number;
 
   if (pedido.canal === 'Propio') {
-    const cuentaCobro = cuentaCaja(pedido.formaPago === 'Transferencia' ? 'Transferencia' : 'Efectivo');
+    const cuentaCobro = cuentaCaja(pedido.formaPago);
     const total = base + impuesto + domicilio;
     detalles = [
       d(cuentaCobro, total, 0),
@@ -440,6 +576,9 @@ function entregarPedido(estado: EstadoApp, pedido: PedidoDomicilio): EstadoApp {
     total: totalVenta,
     costo: costoProductos,
     formaPago: pedido.formaPago,
+    pagos:
+      pedido.formaPago === 'Plataforma' ? [] : [{ medio: pedido.formaPago, monto: totalVenta }],
+    propina: 0,
     canal: 'Domicilio',
     domicilio: domicilioVenta,
     pedidoId: pedido.id,
@@ -447,7 +586,7 @@ function entregarPedido(estado: EstadoApp, pedido: PedidoDomicilio): EstadoApp {
     sedeId: pedido.sedeId,
   };
 
-  return {
+  const conVenta: EstadoApp = {
     ...estado,
     ventas: [...estado.ventas, venta],
     asientos: [...estado.asientos, asiento],
@@ -457,6 +596,15 @@ function entregarPedido(estado: EstadoApp, pedido: PedidoDomicilio): EstadoApp {
         : p,
     ),
   };
+
+  // Todo domicilio entregado sale con su tiquete POS a nombre del cliente.
+  return emitirFactura(conVenta, {
+    venta,
+    documento: 'POS',
+    cliente: { ...CONSUMIDOR_FINAL, nombre: pedido.cliente },
+    pagos: venta.pagos ?? [],
+    referencia: 'Domicilio ' + pedido.id + (pedido.canal === 'Plataforma' ? ' (plataforma)' : ''),
+  });
 }
 
 export function aplicarAvancePedido(estado: EstadoApp, pedidoId: string): EstadoApp {
@@ -468,19 +616,39 @@ export function aplicarAvancePedido(estado: EstadoApp, pedidoId: string): Estado
   const siguiente = ORDEN_ESTADOS[idx + 1];
   if (siguiente === 'Entregado') return entregarPedido(estado, pedido);
 
-  return {
+  let nuevo: EstadoApp = {
     ...estado,
     pedidos: estado.pedidos.map((p) => (p.id === pedidoId ? { ...p, estado: siguiente } : p)),
   };
+
+  // Pasar a cocina manda la comanda al KDS (solo pedidos del día, no el histórico
+  // precargado). Al salir el domiciliario, la comanda se da por despachada.
+  if (siguiente === 'En preparación' && pedido.fecha === hoyISO()) {
+    nuevo = crearComanda(nuevo, {
+      origen: 'Domicilio',
+      referencia: pedido.id,
+      etiqueta: 'Domicilio ' + pedido.id + ' · ' + pedido.zona,
+      captura: 'Caja',
+      lineas: pedido.lineas.map((l) => ({ productoId: l.productoId, cantidad: l.cantidad })),
+      sedeId: pedido.sedeId,
+    });
+  }
+  if (siguiente === 'En camino') nuevo = entregarComandasDe(nuevo, pedidoId);
+  return nuevo;
 }
 
 export function aplicarCancelacionPedido(estado: EstadoApp, pedidoId: string): EstadoApp {
-  return {
+  const pedido = estado.pedidos.find((p) => p.id === pedidoId);
+  if (!pedido || pedido.estado === 'Entregado') return estado;
+  let nuevo: EstadoApp = {
     ...estado,
-    pedidos: estado.pedidos.map((p) =>
-      p.id === pedidoId && p.estado !== 'Entregado' ? { ...p, estado: 'Cancelado' } : p,
-    ),
+    pedidos: estado.pedidos.map((p) => (p.id === pedidoId ? { ...p, estado: 'Cancelado' } : p)),
   };
+  // Si ya estaba en cocina, sus platos se anulan para que no se sigan preparando.
+  for (const c of nuevo.comandas.filter((x) => x.referencia === pedidoId && !x.entregadaTs)) {
+    for (const l of c.lineas) nuevo = aplicarAnularLinea(nuevo, c.id, l.id, 'Pedido cancelado');
+  }
+  return nuevo;
 }
 
 export function aplicarLiquidacionPlataforma(

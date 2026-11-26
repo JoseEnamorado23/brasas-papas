@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CalendarClock, Check, UserCheck, X } from 'lucide-react';
 import type { EstadoReserva, Reserva, ZonaSalon } from '../types';
 import { useTienda } from '../store/tienda';
 import { ZONAS_SALON } from '../data/salon';
 import { formatoFecha, hoyISO } from '../lib/contabilidad';
 import { reservasDelDia, vistaSalon } from '../lib/salon';
-import { filtrarPorSede, sedeParaOperar } from '../lib/sedes';
 import { Boton, Campo, Entrada, EstadoVacio, Etiqueta, Kpi, Panel, Selector } from '../components/ui';
 
 const TONO: Record<EstadoReserva, 'neutro' | 'ingreso' | 'egreso' | 'info'> = {
@@ -18,11 +17,10 @@ const TONO: Record<EstadoReserva, 'neutro' | 'ingreso' | 'egreso' | 'info'> = {
 };
 
 export function Reservas() {
-  const { estado, sedeActual } = useTienda();
-  const vista = useMemo(() => filtrarPorSede(estado, sedeActual), [estado, sedeActual]);
+  const { estado } = useTienda();
   const [fecha, setFecha] = useState(hoyISO());
 
-  const agenda = useMemo(() => reservasDelDia(vista, fecha), [vista, fecha]);
+  const agenda = useMemo(() => reservasDelDia(estado, fecha), [estado, fecha]);
 
   const kpi = useMemo(() => {
     const cuenta = (e: EstadoReserva) => agenda.filter((r) => r.estado === e).length;
@@ -40,11 +38,11 @@ export function Reservas() {
 
   const proximas = useMemo(
     () =>
-      vista.reservas
+      estado.reservas
         .filter((r) => r.fecha > fecha && r.estado !== 'Cancelada')
         .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.hora.localeCompare(b.hora))
         .slice(0, 6),
-    [vista.reservas, fecha],
+    [estado.reservas, fecha],
   );
 
   return (
@@ -115,7 +113,7 @@ export function Reservas() {
 // --- Formulario de nueva reserva --------------------------------
 
 function FormularioReserva() {
-  const { estado, dispatch, sedeActual } = useTienda();
+  const { estado, dispatch, sede } = useTienda();
   const [fecha, setFecha] = useState(hoyISO());
   const [hora, setHora] = useState('20:00');
   const [cliente, setCliente] = useState('');
@@ -124,12 +122,7 @@ function FormularioReserva() {
   const [zona, setZona] = useState<'' | ZonaSalon>('');
   const [mesaId, setMesaId] = useState('');
   const [notas, setNotas] = useState('');
-  const [sedeReserva, setSedeReserva] = useState(sedeParaOperar(sedeActual, estado.sedes));
-
-  useEffect(() => {
-    setSedeReserva(sedeParaOperar(sedeActual, estado.sedes));
-    setMesaId('');
-  }, [sedeActual, estado.sedes]);
+  const sedeReserva = sede;
 
   const mesasZona = estado.mesas.filter(
     (m) => m.sedeId === sedeReserva && (zona ? m.zona === zona : true),
@@ -212,15 +205,6 @@ function FormularioReserva() {
           </Campo>
           <Campo etiqueta="Notas (opcional)">
             <Entrada value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Cumpleaños" />
-          </Campo>
-          <Campo etiqueta="Sede">
-            <Selector value={sedeReserva} onChange={(e) => setSedeReserva(e.target.value)}>
-              {estado.sedes.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.nombre}
-                </option>
-              ))}
-            </Selector>
           </Campo>
         </div>
       </div>
@@ -320,7 +304,7 @@ function PanelSentar({ reserva, onHecho }: { reserva: Reserva; onHecho: () => vo
   const meseros = estado.empleados.filter((e) => e.activo && e.sedeId === reserva.sedeId);
 
   const disponibles = useMemo(() => {
-    const vistas = vistaSalon(filtrarPorSede(estado, reserva.sedeId));
+    const vistas = vistaSalon(estado);
     return vistas
       .filter((v) => v.estado === 'Libre' || v.mesa.id === reserva.mesaId)
       .map((v) => v.mesa);

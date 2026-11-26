@@ -1,21 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTienda } from '../store/tienda';
 import { calcularLineaNomina } from '../lib/operaciones';
 import { formatoFecha, formatoMoneda } from '../lib/contabilidad';
-import { filtrarPorSede, sedeParaOperar, TODAS_SEDES } from '../lib/sedes';
-import { Boton, Campo, Entrada, EstadoVacio, Panel, Selector } from '../components/ui';
+import { Boton, Campo, Entrada, EstadoVacio, Panel } from '../components/ui';
 
 export function Empleados() {
-  const { estado, dispatch, sedeActual } = useTienda();
-  const vista = useMemo(() => filtrarPorSede(estado, sedeActual), [estado, sedeActual]);
+  const { estado, dispatch, sede } = useTienda();
 
   const [nombre, setNombre] = useState('');
   const [cargo, setCargo] = useState('');
   const [salario, setSalario] = useState('');
-  const [sedeNuevo, setSedeNuevo] = useState(sedeParaOperar(sedeActual, estado.sedes));
-  useEffect(() => {
-    setSedeNuevo(sedeParaOperar(sedeActual, estado.sedes));
-  }, [sedeActual, estado.sedes]);
+  const sedeNuevo = sede;
 
   const agregar = () => {
     const monto = Number(salario);
@@ -33,15 +28,10 @@ export function Empleados() {
     setSalario('');
   };
 
-  const activos = vista.empleados.filter((e) => e.activo);
+  const activos = estado.empleados.filter((e) => e.activo);
   const [periodo, setPeriodo] = useState('1–15 de septiembre de 2026');
   const [seleccion, setSeleccion] = useState<Set<string>>(() => new Set(activos.map((e) => e.id)));
 
-  // Si cambia la sede filtrada, la preselección de nómina se ajusta a la plantilla visible.
-  useEffect(() => {
-    setSeleccion(new Set(vista.empleados.filter((e) => e.activo).map((e) => e.id)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sedeActual]);
 
   const alternar = (id: string) =>
     setSeleccion((prev) => {
@@ -52,7 +42,7 @@ export function Empleados() {
     });
 
   const previa = useMemo(() => {
-    const lineas = vista.empleados
+    const lineas = estado.empleados
       .filter((e) => seleccion.has(e.id))
       .map((e) => ({ empleado: e, ...calcularLineaNomina(e.salarioMensual) }));
     return {
@@ -61,7 +51,7 @@ export function Empleados() {
       deducciones: lineas.reduce((s, l) => s + l.deducciones, 0),
       neto: lineas.reduce((s, l) => s + l.neto, 0),
     };
-  }, [vista.empleados, seleccion]);
+  }, [estado.empleados, seleccion]);
 
   const pagarNomina = () => {
     if (previa.lineas.length === 0 || !periodo.trim()) return;
@@ -69,11 +59,11 @@ export function Empleados() {
       tipo: 'NOMINA',
       periodo: periodo.trim(),
       empleadoIds: [...seleccion],
-      sedeId: sedeActual === TODAS_SEDES ? undefined : sedeActual,
+      sedeId: sede,
     });
   };
 
-  const nominas = [...vista.nominas].reverse();
+  const nominas = [...estado.nominas].reverse();
 
   return (
     <div className="space-y-4">
@@ -90,7 +80,7 @@ export function Empleados() {
                 </tr>
               </thead>
               <tbody>
-                {vista.empleados.map((e) => (
+                {estado.empleados.map((e) => (
                   <tr key={e.id} className="border-b border-line/70">
                     <td className="py-2.5 pl-4 pr-2 text-ink">{e.nombre}</td>
                     <td className="px-2 py-2.5 text-ink/70">{e.cargo}</td>
@@ -124,15 +114,6 @@ export function Empleados() {
                 placeholder="1450000"
               />
             </Campo>
-            <Campo etiqueta="Sede">
-              <Selector value={sedeNuevo} onChange={(ev) => setSedeNuevo(ev.target.value)}>
-                {estado.sedes.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.nombre}
-                  </option>
-                ))}
-              </Selector>
-            </Campo>
             <Boton type="button" onClick={agregar} disabled={!sedeNuevo} className="mt-1 w-full">
               Agregar a la plantilla
             </Boton>
@@ -150,7 +131,7 @@ export function Empleados() {
               <Entrada value={periodo} onChange={(ev) => setPeriodo(ev.target.value)} />
             </Campo>
             <ul className="mt-1 divide-y divide-line rounded-md border border-line">
-              {vista.empleados.map((e) => {
+              {estado.empleados.map((e) => {
                 const linea = calcularLineaNomina(e.salarioMensual);
                 return (
                   <li key={e.id}>

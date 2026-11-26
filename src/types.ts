@@ -42,11 +42,17 @@ export interface Asiento {
 }
 
 export type CategoriaProducto =
-  | 'Hamburguesas'
   | 'Combos'
-  | 'Acompañamientos'
+  | 'Pizzas'
+  | 'Hamburguesas'
+  | 'Perros'
+  | 'Salchipapas y picadas'
+  | 'Fritos'
   | 'Bebidas'
   | 'Postres';
+
+/** Estación de cocina a la que el KDS enruta cada producto. */
+export type EstacionCocina = 'Horno' | 'Cocina' | 'Barra';
 
 export interface ComponenteCombo {
   productoId: string;
@@ -63,6 +69,12 @@ export interface Producto {
   descripcion?: string;
   /** Solo para combos: productos que arma, para mostrar el detalle y el ahorro. */
   componentes?: ComponenteCombo[];
+  /** Estación que lo prepara (los combos se reparten según sus componentes). */
+  estacion: EstacionCocina;
+  /** Minutos estándar de preparación: alimentan el semáforo del KDS. */
+  tiempoPrep: number;
+  /** Marcado como agotado: el mesero y la caja no lo pueden vender. */
+  agotado?: boolean;
 }
 
 export interface Empleado {
@@ -76,8 +88,18 @@ export interface Empleado {
 
 export type FormaPago = 'Efectivo' | 'Transferencia';
 export type FormaPagoCompra = FormaPago | 'Crédito';
-export type FormaPagoDomicilio = FormaPago | 'Plataforma';
-export type CanalVenta = 'Mostrador' | 'Domicilio';
+export type CanalVenta = 'Mesa' | 'Mostrador' | 'Domicilio';
+
+/** Medios con los que se cobra en caja. Todo lo que no es efectivo entra a bancos. */
+export type MedioPago = 'Efectivo' | 'Nequi' | 'Daviplata' | 'Bre-B' | 'Tarjeta';
+export type FormaPagoDomicilio = MedioPago | 'Plataforma';
+/** Resumen del pago de una venta: un medio, varios (mixto) o la plataforma de domicilios. */
+export type FormaPagoVenta = FormaPagoDomicilio | 'Mixto';
+
+export interface Pago {
+  medio: MedioPago;
+  monto: number;
+}
 
 export type CategoriaGasto =
   | 'Arrendamiento'
@@ -100,13 +122,105 @@ export interface Venta {
   lineas: LineaVenta[];
   base: number; // subtotal sin impuesto
   impuesto: number; // impuesto al consumo
-  total: number; // base + impuesto (+ domicilio si aplica)
+  total: number; // base + impuesto (+ domicilio si aplica); no incluye propina
   costo: number; // costo de los insumos vendidos
-  formaPago: FormaPagoDomicilio;
+  formaPago: FormaPagoVenta;
+  pagos?: Pago[];
+  /** Propina voluntaria: no es ingreso del restaurante, se debe a los empleados. */
+  propina: number;
   canal: CanalVenta;
   domicilio: number; // ingreso por envío cobrado al cliente (0 en mostrador)
   pedidoId?: string; // folio del pedido a domicilio que la originó
+  sesionId?: string; // sesión de mesa que la originó
+  facturaId?: string; // documento electrónico emitido
   asientoId: string;
+  sedeId: string;
+}
+
+// --- Facturación electrónica (simulada) -----------------------------
+
+/** POS = documento equivalente electrónico tiquete POS; FE = factura electrónica de venta. */
+export type TipoDocumento = 'POS' | 'FE';
+export type TipoIdentificacion = 'CC' | 'NIT' | 'CE';
+
+export interface ClienteFactura {
+  tipoId: TipoIdentificacion;
+  numero: string;
+  nombre: string;
+  correo?: string;
+}
+
+export interface Factura {
+  id: string; // POS-1001 · FE-201
+  tipo: TipoDocumento;
+  prefijo: string;
+  numero: number;
+  fecha: string;
+  emitidaTs: number;
+  ventaId: string;
+  cliente: ClienteFactura;
+  lineas: LineaVenta[];
+  base: number;
+  impuesto: number;
+  domicilio: number;
+  propina: number;
+  total: number; // lo que paga el cliente, incluida la propina
+  pagos: Pago[];
+  formaPago: FormaPagoVenta;
+  /** Código único (CUDE para POS, CUFE para FE). Aquí es una huella simulada. */
+  codigoUnico: string;
+  canal: CanalVenta;
+  referencia?: string; // "Mesa 6", "Domicilio D-0012"…
+  atendio?: string;
+}
+
+// --- Comandas y cocina (KDS) ----------------------------------------
+
+export type OrigenComanda = 'Mesa' | 'Mostrador' | 'Domicilio';
+/** Cómo llegó la comanda: celular del mesero, comanda de papel digitada, o tomada en caja (mostrador y domicilios). */
+export type CapturaComanda = 'Celular' | 'Papel' | 'Caja';
+export type EstadoItemComanda = 'Pendiente' | 'Preparando' | 'Listo';
+
+/** Lo que pidió el cliente, tal como se cobra (un combo es una sola línea). */
+export interface LineaComanda {
+  id: string;
+  productoId: string;
+  nombre: string;
+  cantidad: number;
+  precioUnit: number;
+  nota?: string;
+  anulada?: { motivo: string; ts: number };
+}
+
+/** Lo que prepara la cocina: los combos se abren en sus componentes. */
+export interface ItemComanda {
+  id: string;
+  lineaId: string;
+  productoId: string;
+  nombre: string;
+  cantidad: number;
+  nota?: string;
+  estacion: EstacionCocina;
+  tiempoPrep: number;
+  estado: EstadoItemComanda;
+  listoTs?: number;
+  /** Combo al que pertenece el componente (el KDS reparte los combos por estación). */
+  combo?: string;
+  anulado?: { motivo: string; ts: number };
+}
+
+export interface Comanda {
+  id: string; // K-0001
+  origen: OrigenComanda;
+  referencia: string; // id de la sesión, venta o pedido
+  etiqueta: string; // "Mesa 6", "Para llevar V-0045", "Domicilio D-0019"
+  ronda: number;
+  mesero?: string;
+  captura: CapturaComanda;
+  creadaTs: number;
+  lineas: LineaComanda[];
+  items: ItemComanda[];
+  entregadaTs?: number;
   sedeId: string;
 }
 
@@ -158,7 +272,14 @@ export interface PagoNomina {
   sedeId?: string;
 }
 
-export type ZonaDomicilio = 'Centro' | 'Chapinero' | 'Norte' | 'Sur' | 'Occidente';
+export type ZonaDomicilio =
+  | 'Centro'
+  | 'Norte'
+  | 'La Castellana'
+  | 'El Recreo'
+  | 'Mocarí'
+  | 'La Granja'
+  | 'Sur';
 export type CanalDomicilio = 'Propio' | 'Plataforma';
 export type EstadoPedido =
   | 'Recibido'
@@ -280,42 +401,8 @@ export interface SesionMesa {
   impuesto: number;
   total: number;
   estado: 'Abierta' | 'Cerrada';
+  ventaId?: string; // venta generada al cobrar la mesa
   sedeId: string;
-}
-
-// --- Eventos y catering ------------------------------------------
-
-export type EstadoEvento =
-  | 'Pendiente por cotizar'
-  | 'Cotizado'
-  | 'Confirmado'
-  | 'Realizado'
-  | 'Cancelado';
-
-export type TipoEvento =
-  | 'Cumpleaños'
-  | 'Primera comunión'
-  | 'Matrimonio'
-  | 'Grado'
-  | 'Empresarial'
-  | 'Otro';
-
-export interface SolicitudEvento {
-  id: string; // EV-0001
-  sedeId: string;
-  cliente: string;
-  telefono: string;
-  fecha: string; // YYYY-MM-DD
-  hora: string; // HH:MM
-  lugar: string; // dirección o sitio del evento
-  tipo: TipoEvento;
-  numeroPersonas: number;
-  descripcion: string;
-  estado: EstadoEvento;
-  valorCotizado?: number;
-  anticipoPagado: boolean;
-  valorAnticipo?: number;
-  creada: number; // orden de llegada
 }
 
 export interface EstadoApp {
@@ -334,5 +421,6 @@ export interface EstadoApp {
   mesas: Mesa[];
   reservas: Reserva[];
   sesiones: SesionMesa[];
-  eventos: SolicitudEvento[];
+  comandas: Comanda[];
+  facturas: Factura[];
 }

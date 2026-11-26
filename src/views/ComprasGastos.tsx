@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import type {
   CategoriaGasto,
   DestinoCompra,
@@ -8,7 +8,6 @@ import type {
 import { useTienda } from '../store/tienda';
 import { CATEGORIAS_GASTO } from '../data/cuentas';
 import { formatoFecha, formatoMoneda } from '../lib/contabilidad';
-import { filtrarPorSede, sedeParaOperar } from '../lib/sedes';
 import { Boton, Campo, Entrada, EstadoVacio, Etiqueta, Panel, Selector } from '../components/ui';
 
 type MovimientoUnificado = {
@@ -22,14 +21,7 @@ type MovimientoUnificado = {
 };
 
 export function ComprasGastos() {
-  const { estado, dispatch, sedeActual } = useTienda();
-  const vista = useMemo(() => filtrarPorSede(estado, sedeActual), [estado, sedeActual]);
-
-  // --- Sede de operación (compartida por ambos formularios) ---
-  const [sedeForm, setSedeForm] = useState(sedeParaOperar(sedeActual, estado.sedes));
-  useEffect(() => {
-    setSedeForm(sedeParaOperar(sedeActual, estado.sedes));
-  }, [sedeActual, estado.sedes]);
+  const { estado, dispatch, sede: sedeForm } = useTienda();
 
   // --- Formulario de compra ---
   const [proveedor, setProveedor] = useState('');
@@ -86,7 +78,7 @@ export function ComprasGastos() {
   };
 
   const movimientos: MovimientoUnificado[] = [
-    ...vista.compras.map((c) => ({
+    ...estado.compras.map((c) => ({
       id: c.id,
       fecha: c.fecha,
       tipo: 'Compra' as const,
@@ -95,7 +87,7 @@ export function ComprasGastos() {
       formaPago: c.formaPago,
       asientoId: c.asientoId,
     })),
-    ...vista.gastos.map((g) => ({
+    ...estado.gastos.map((g) => ({
       id: g.id,
       fecha: g.fecha,
       tipo: 'Gasto' as const,
@@ -108,16 +100,6 @@ export function ComprasGastos() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-paper/60 px-4 py-2.5 text-sm">
-        <span className="text-muted">Sede de las nuevas compras y gastos:</span>
-        <Selector value={sedeForm} onChange={(e) => setSedeForm(e.target.value)} className="!py-1 text-xs">
-          {estado.sedes.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.nombre}
-            </option>
-          ))}
-        </Selector>
-      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel titulo="Registrar compra a proveedor">

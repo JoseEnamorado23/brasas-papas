@@ -1,4 +1,5 @@
 import type { EstadoMesa, Mesa, ZonaSalon } from '../types';
+import { SEDE_PRINCIPAL } from './sedes';
 
 /** Zonas del local en el orden en que se muestran en los tableros. */
 export const ZONAS_SALON: ZonaSalon[] = ['Salón', 'Terraza', 'Barra', 'Privado'];
@@ -8,8 +9,7 @@ export const LOCAL = { ancho: 14, fondo: 11, altoMuro: 1.3 };
 
 /**
  * Distribución de un salón tipo, en metros con el origen al centro del local
- * (x crece a la derecha, z hacia la fachada). Las dos sedes comparten esta
- * misma planta física; solo cambian el prefijo de folio y la sede dueña.
+ * (x crece a la derecha, z hacia la fachada).
  */
 function plantaTipo(
   prefijo: string,
@@ -65,13 +65,7 @@ function plantaTipo(
   ];
 }
 
-/** Mesas de la Sede Centro: conserva los folios M-01..M-15 usados por la demo. */
-export const mesasCentro: Mesa[] = plantaTipo('M', 'sede-centro');
-
-/** Mesas de la Sede Norte: misma planta física, folios N-01..N-15. */
-export const mesasNorte: Mesa[] = plantaTipo('N', 'sede-norte');
-
-export const mesasIniciales: Mesa[] = [...mesasCentro, ...mesasNorte];
+export const mesasIniciales: Mesa[] = plantaTipo('M', SEDE_PRINCIPAL);
 
 /** Color por estado, compartido por el modelo 3D y las etiquetas de las vistas. */
 export const COLOR_ESTADO_MESA: Record<EstadoMesa, string> = {

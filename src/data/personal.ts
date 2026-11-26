@@ -1,10 +1,26 @@
 import type { Empleado } from '../types';
+import { SEDE_PRINCIPAL } from './sedes';
+
+const e = (id: string, nombre: string, cargo: string, salarioMensual: number): Empleado => ({
+  id,
+  nombre,
+  cargo,
+  salarioMensual,
+  activo: true,
+  sedeId: SEDE_PRINCIPAL,
+});
 
 export const empleadosIniciales: Empleado[] = [
-  { id: 'emp-1', nombre: 'Laura Restrepo', cargo: 'Administradora', salarioMensual: 2600000, activo: true, sedeId: 'sede-centro' },
-  { id: 'emp-2', nombre: 'Andrés Gómez', cargo: 'Jefe de cocina', salarioMensual: 2200000, activo: true, sedeId: 'sede-centro' },
-  { id: 'emp-3', nombre: 'Valentina Ruiz', cargo: 'Cajera', salarioMensual: 1500000, activo: true, sedeId: 'sede-centro' },
-  { id: 'emp-4', nombre: 'Julián Torres', cargo: 'Parrillero', salarioMensual: 1600000, activo: true, sedeId: 'sede-norte' },
-  { id: 'emp-5', nombre: 'Daniela Peña', cargo: 'Domicilios', salarioMensual: 1450000, activo: true, sedeId: 'sede-norte' },
-  { id: 'emp-6', nombre: 'Camilo Herrera', cargo: 'Administrador', salarioMensual: 2400000, activo: true, sedeId: 'sede-norte' },
+  e('emp-1', 'Laura Espitia', 'Administradora', 2600000),
+  e('emp-2', 'Andrés Lugo', 'Jefe de cocina', 2200000),
+  e('emp-3', 'Valentina Ruiz', 'Cajera', 1500000),
+  e('emp-4', 'Julián Pacheco', 'Pizzero', 1600000),
+  e('emp-5', 'Yuranis Martínez', 'Auxiliar de cocina', 1423500),
+  e('emp-6', 'Camilo Negrete', 'Mesero', 1423500),
+  e('emp-7', 'Daniela Sotelo', 'Mesera', 1423500),
+  e('emp-8', 'Esteban Arrieta', 'Mesero', 1423500),
 ];
+
+/** Personal que atiende mesas: alimenta los selectores de mesero. */
+export const esMesero = (empleado: Empleado): boolean =>
+  empleado.activo && /^meser/i.test(empleado.cargo);

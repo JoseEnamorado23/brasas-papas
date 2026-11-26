@@ -28,12 +28,16 @@ export const formatoFecha = (iso: string): string => fechaCorta.format(parseFech
 
 export const formatoFechaDia = (iso: string): string => fechaDia.format(parseFecha(iso));
 
-export const hoyISO = (): string => new Date().toISOString().slice(0, 10);
+/** Fecha local YYYY-MM-DD (toISOString usaría UTC y en Colombia saltaría de día a las 7 p. m.). */
+const isoLocal = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+export const hoyISO = (): string => isoLocal(new Date());
 
 export const sumaISO = (iso: string, dias: number): string => {
   const d = parseFecha(iso);
   d.setDate(d.getDate() + dias);
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 };
 
 export const folio = (prefijo: string, cantidadPrevia: number): string =>

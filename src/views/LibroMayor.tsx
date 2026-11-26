@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react';
 import { useTienda } from '../store/tienda';
 import {
@@ -6,15 +6,13 @@ import {
   formatoFecha,
   formatoMoneda,
 } from '../lib/contabilidad';
-import { filtrarPorSede } from '../lib/sedes';
 import { Panel } from '../components/ui';
 
 const guion = (valor: number) => (valor > 0.5 ? formatoMoneda(valor) : '—');
 
 export function LibroMayor() {
-  const { estado, sedeActual } = useTienda();
-  const vista = useMemo(() => filtrarPorSede(estado, sedeActual), [estado, sedeActual]);
-  const balance = construirBalanceComprobacion(vista);
+  const { estado } = useTienda();
+  const balance = construirBalanceComprobacion(estado);
   const [abierta, setAbierta] = useState<number | null>(null);
 
   return (

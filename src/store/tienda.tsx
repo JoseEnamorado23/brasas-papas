@@ -1,34 +1,28 @@
-import {
-  createContext,
-  useContext,
-  useMemo,
-  useReducer,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, useContext, useMemo, useReducer, type ReactNode } from 'react';
 import type {
   CanalDomicilio,
+  CapturaComanda,
   CategoriaGasto,
   CategoriaProducto,
   DestinoCompra,
   Domiciliario,
+  EstacionCocina,
   EstadoApp,
-  EstadoEvento,
   EstadoReserva,
   Empleado,
   FormaPago,
   FormaPagoCompra,
   FormaPagoDomicilio,
   Producto,
-  TipoEvento,
   ZonaDomicilio,
   ZonaSalon,
 } from '../types';
 import { construirEstadoInicial } from '../data/seed';
-import { TODAS_SEDES } from '../data/sedes';
+import { SEDE_PRINCIPAL } from '../data/sedes';
 import {
   aplicarAvancePedido,
   aplicarCancelacionPedido,
+  aplicarCobrarMesa,
   aplicarCompra,
   aplicarGasto,
   aplicarLiquidacionPlataforma,
@@ -38,26 +32,27 @@ import {
 } from '../lib/operaciones';
 import {
   aplicarAbrirMesa,
-  aplicarCerrarMesa,
-  aplicarConsumo,
   aplicarEstadoReserva,
   aplicarLimpiarMesa,
   aplicarNuevaReserva,
-  aplicarQuitarConsumo,
   aplicarSentarReserva,
 } from '../lib/salon';
 import {
-  aplicarAnticipoEvento,
-  aplicarCotizarEvento,
-  aplicarEstadoEvento,
-  aplicarNuevaSolicitudEvento,
-} from '../lib/eventos';
+  aplicarAnularLinea,
+  aplicarAvanzarItem,
+  aplicarComandaMesa,
+  aplicarEntregarComanda,
+  aplicarListoEstacion,
+  type LineaPedida,
+} from '../lib/comandas';
+import type { DatosCobro } from '../lib/facturacion';
 
 export type Accion =
   | {
       tipo: 'VENTA';
-      lineas: { productoId: string; cantidad: number }[];
-      formaPago: FormaPago;
+      lineas: LineaPedida[];
+      cobro: DatosCobro;
+      enviarCocina: boolean;
       sedeId: string;
     }
   | {
@@ -137,33 +132,36 @@ export type Accion =
       mesero: string;
     }
   | { tipo: 'ABRIR_MESA'; mesaId: string; comensales: number; mesero: string }
-  | { tipo: 'CONSUMO_MESA'; sesionId: string; productoId: string; delta: number }
-  | { tipo: 'QUITAR_CONSUMO'; sesionId: string; productoId: string }
-  | { tipo: 'CERRAR_MESA'; sesionId: string }
+  | { tipo: 'COMANDA_MESA'; sesionId: string; lineas: LineaPedida[]; captura: CapturaComanda }
+  | { tipo: 'ANULAR_LINEA'; comandaId: string; lineaId: string; motivo: string }
+  | { tipo: 'AVANZAR_ITEM'; comandaId: string; itemId: string }
+  | { tipo: 'LISTO_ESTACION'; comandaId: string; estacion?: EstacionCocina }
+  | { tipo: 'ENTREGAR_COMANDA'; comandaId: string }
+  | { tipo: 'COBRAR_MESA'; sesionId: string; cobro: DatosCobro }
   | { tipo: 'LIMPIAR_MESA'; mesaId: string }
-  | {
-      tipo: 'NUEVA_SOLICITUD_EVENTO';
-      sedeId: string;
-      cliente: string;
-      telefono: string;
-      fecha: string;
-      hora: string;
-      lugar: string;
-      tipo_evento: TipoEvento;
-      numeroPersonas: number;
-      descripcion: string;
-    }
-  | { tipo: 'COTIZAR_EVENTO'; eventoId: string; valorCotizado: number }
-  | { tipo: 'ESTADO_EVENTO'; eventoId: string; estado: EstadoEvento }
-  | { tipo: 'ANTICIPO_EVENTO'; eventoId: string; pagado: boolean; valorAnticipo?: number }
+  | { tipo: 'AGOTADO'; productoId: string; agotado: boolean }
   | { tipo: 'REINICIAR' };
 
 const EMOJI_POR_CATEGORIA: Record<CategoriaProducto, string> = {
   Combos: '🍔',
+  Pizzas: '🍕',
   Hamburguesas: '🍔',
-  Acompañamientos: '🍟',
+  Perros: '🌭',
+  'Salchipapas y picadas': '🍟',
+  Fritos: '🫓',
   Bebidas: '🥤',
-  Postres: '🍨',
+  Postres: '🍰',
+};
+
+const ESTACION_POR_CATEGORIA: Record<CategoriaProducto, EstacionCocina> = {
+  Combos: 'Cocina',
+  Pizzas: 'Horno',
+  Hamburguesas: 'Cocina',
+  Perros: 'Cocina',
+  'Salchipapas y picadas': 'Cocina',
+  Fritos: 'Cocina',
+  Bebidas: 'Barra',
+  Postres: 'Barra',
 };
 
 function reductor(estado: EstadoApp, accion: Accion): EstadoApp {
@@ -171,7 +169,8 @@ function reductor(estado: EstadoApp, accion: Accion): EstadoApp {
     case 'VENTA':
       return aplicarVenta(estado, {
         lineas: accion.lineas,
-        formaPago: accion.formaPago,
+        cobro: accion.cobro,
+        enviarCocina: accion.enviarCocina,
         sedeId: accion.sedeId,
       });
 
@@ -208,6 +207,8 @@ function reductor(estado: EstadoApp, accion: Accion): EstadoApp {
         precio: accion.precio,
         costo: accion.costo,
         emoji: accion.emoji ?? EMOJI_POR_CATEGORIA[accion.categoria],
+        estacion: ESTACION_POR_CATEGORIA[accion.categoria],
+        tiempoPrep: ESTACION_POR_CATEGORIA[accion.categoria] === 'Barra' ? 3 : 10,
       };
       return { ...estado, productos: [...estado.productos, nuevo] };
     }
@@ -278,39 +279,38 @@ function reductor(estado: EstadoApp, accion: Accion): EstadoApp {
         mesero: accion.mesero,
       });
 
-    case 'CONSUMO_MESA':
-      return aplicarConsumo(estado, accion.sesionId, accion.productoId, accion.delta);
+    case 'COMANDA_MESA':
+      return aplicarComandaMesa(estado, {
+        sesionId: accion.sesionId,
+        lineas: accion.lineas,
+        captura: accion.captura,
+      });
 
-    case 'QUITAR_CONSUMO':
-      return aplicarQuitarConsumo(estado, accion.sesionId, accion.productoId);
+    case 'ANULAR_LINEA':
+      return aplicarAnularLinea(estado, accion.comandaId, accion.lineaId, accion.motivo);
 
-    case 'CERRAR_MESA':
-      return aplicarCerrarMesa(estado, accion.sesionId);
+    case 'AVANZAR_ITEM':
+      return aplicarAvanzarItem(estado, accion.comandaId, accion.itemId);
+
+    case 'LISTO_ESTACION':
+      return aplicarListoEstacion(estado, accion.comandaId, accion.estacion);
+
+    case 'ENTREGAR_COMANDA':
+      return aplicarEntregarComanda(estado, accion.comandaId);
+
+    case 'COBRAR_MESA':
+      return aplicarCobrarMesa(estado, accion.sesionId, accion.cobro);
 
     case 'LIMPIAR_MESA':
       return aplicarLimpiarMesa(estado, accion.mesaId);
 
-    case 'NUEVA_SOLICITUD_EVENTO':
-      return aplicarNuevaSolicitudEvento(estado, {
-        sedeId: accion.sedeId,
-        cliente: accion.cliente,
-        telefono: accion.telefono,
-        fecha: accion.fecha,
-        hora: accion.hora,
-        lugar: accion.lugar,
-        tipo: accion.tipo_evento,
-        numeroPersonas: accion.numeroPersonas,
-        descripcion: accion.descripcion,
-      });
-
-    case 'COTIZAR_EVENTO':
-      return aplicarCotizarEvento(estado, accion.eventoId, accion.valorCotizado);
-
-    case 'ESTADO_EVENTO':
-      return aplicarEstadoEvento(estado, accion.eventoId, accion.estado);
-
-    case 'ANTICIPO_EVENTO':
-      return aplicarAnticipoEvento(estado, accion.eventoId, accion.pagado, accion.valorAnticipo);
+    case 'AGOTADO':
+      return {
+        ...estado,
+        productos: estado.productos.map((p) =>
+          p.id === accion.productoId ? { ...p, agotado: accion.agotado } : p,
+        ),
+      };
 
     case 'REINICIAR':
       return construirEstadoInicial();
@@ -323,20 +323,15 @@ function reductor(estado: EstadoApp, accion: Accion): EstadoApp {
 interface ValorContexto {
   estado: EstadoApp;
   dispatch: (accion: Accion) => void;
-  /** Sede seleccionada globalmente: el id de una sede, o `TODAS_SEDES` para el consolidado. */
-  sedeActual: string;
-  setSedeActual: (sedeId: string) => void;
+  /** Sede con la que se opera. Hoy hay una sola; el modelo ya admite más. */
+  sede: string;
 }
 
 const TiendaContext = createContext<ValorContexto | null>(null);
 
 export function TiendaProvider({ children }: { children: ReactNode }) {
   const [estado, dispatch] = useReducer(reductor, undefined, construirEstadoInicial);
-  const [sedeActual, setSedeActual] = useState<string>(TODAS_SEDES);
-  const valor = useMemo(
-    () => ({ estado, dispatch, sedeActual, setSedeActual }),
-    [estado, sedeActual],
-  );
+  const valor = useMemo(() => ({ estado, dispatch, sede: SEDE_PRINCIPAL }), [estado]);
   return <TiendaContext.Provider value={valor}>{children}</TiendaContext.Provider>;
 }
 

@@ -157,63 +157,6 @@ export function aplicarAbrirMesa(estado: EstadoApp, entrada: EntradaAbrirMesa): 
   return { ...estado, sesiones: [...estado.sesiones, sesion] };
 }
 
-/** Suma `delta` unidades de un producto al consumo; quita la línea si llega a 0. */
-export function aplicarConsumo(
-  estado: EstadoApp,
-  sesionId: string,
-  productoId: string,
-  delta: number,
-): EstadoApp {
-  const producto = estado.productos.find((p) => p.id === productoId);
-  if (!producto) return estado;
-
-  return {
-    ...estado,
-    sesiones: estado.sesiones.map((s) => {
-      if (s.id !== sesionId || s.estado !== 'Abierta') return s;
-      const existe = s.consumo.find((l) => l.productoId === productoId);
-      let consumo: LineaConsumo[];
-      if (existe) {
-        const cantidad = existe.cantidad + delta;
-        consumo =
-          cantidad <= 0
-            ? s.consumo.filter((l) => l.productoId !== productoId)
-            : s.consumo.map((l) =>
-                l.productoId === productoId ? { ...l, cantidad } : l,
-              );
-      } else if (delta > 0) {
-        consumo = [
-          ...s.consumo,
-          {
-            productoId,
-            nombre: producto.nombre,
-            cantidad: delta,
-            precioUnit: producto.precio,
-          },
-        ];
-      } else {
-        consumo = s.consumo;
-      }
-      return conTotales({ ...s, consumo });
-    }),
-  };
-}
-
-export function aplicarQuitarConsumo(
-  estado: EstadoApp,
-  sesionId: string,
-  productoId: string,
-): EstadoApp {
-  return {
-    ...estado,
-    sesiones: estado.sesiones.map((s) =>
-      s.id === sesionId && s.estado === 'Abierta'
-        ? conTotales({ ...s, consumo: s.consumo.filter((l) => l.productoId !== productoId) })
-        : s,
-    ),
-  };
-}
-
 /** Cierra la cuenta: la mesa queda por limpiar y la reserva, si la hubo, cumplida. */
 export function aplicarCerrarMesa(estado: EstadoApp, sesionId: string): EstadoApp {
   const sesion = estado.sesiones.find((s) => s.id === sesionId);

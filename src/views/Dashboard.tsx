@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle2, TriangleAlert } from 'lucide-react';
 import { useTienda } from '../store/tienda';
 import {
@@ -11,7 +11,6 @@ import {
   serieVentasPorDia,
   topProductos,
 } from '../lib/contabilidad';
-import { filtrarPorSede, TODAS_SEDES } from '../lib/sedes';
 import {
   GraficaGastosCategoria,
   GraficaIngresosGastos,
@@ -23,15 +22,10 @@ import { FilaEstado, Kpi, Panel, Regla } from '../components/ui';
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
 export function Dashboard() {
-  const { estado, sedeActual } = useTienda();
-  const vista = useMemo(() => filtrarPorSede(estado, sedeActual), [estado, sedeActual]);
-  const nombreSede =
-    sedeActual === TODAS_SEDES
-      ? 'Todas las sedes (consolidado)'
-      : estado.sedes.find((s) => s.id === sedeActual)?.nombre ?? sedeActual;
-  const ind = calcularIndicadores(vista);
-  const er = calcularEstadoResultados(vista);
-  const bg = calcularBalanceGeneral(vista);
+  const { estado } = useTienda();
+  const ind = calcularIndicadores(estado);
+  const er = calcularEstadoResultados(estado);
+  const bg = calcularBalanceGeneral(estado);
 
   const utilidadPositiva = er.utilidadNeta >= 0;
 
@@ -49,7 +43,7 @@ export function Dashboard() {
       <div className="grid gap-4 lg:grid-cols-[1.05fr_2fr]">
         <div className="rounded-lg border border-line bg-surface p-5">
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted">
-            Utilidad neta del periodo · {nombreSede}
+            Utilidad neta del periodo
           </p>
           <p
             className={[
@@ -77,26 +71,26 @@ export function Dashboard() {
       {/* Gráficas */}
       <Panel titulo="Ventas por día" descripcion="Base gravable diaria de las últimas dos semanas.">
         <div style={{ minHeight: 240 }}>
-          {graficasListas && <GraficaVentasDia datos={serieVentasPorDia(vista, 14)} />}
+          {graficasListas && <GraficaVentasDia datos={serieVentasPorDia(estado, 14)} />}
         </div>
       </Panel>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel titulo="Ingresos vs. gastos" descripcion="Comparación diaria de ingresos y gastos causados.">
           <div style={{ minHeight: 240 }}>
-            {graficasListas && <GraficaIngresosGastos datos={serieIngresosGastos(vista, 14)} />}
+            {graficasListas && <GraficaIngresosGastos datos={serieIngresosGastos(estado, 14)} />}
           </div>
         </Panel>
         <Panel titulo="Gastos por categoría" descripcion="Saldo acumulado de cada cuenta de gasto.">
           <div style={{ minHeight: 240 }}>
-            {graficasListas && <GraficaGastosCategoria datos={gastosPorCategoria(vista)} />}
+            {graficasListas && <GraficaGastosCategoria datos={gastosPorCategoria(estado)} />}
           </div>
         </Panel>
       </div>
 
       <Panel titulo="Productos más vendidos" descripcion="Ingreso base acumulado por producto.">
         <div style={{ minHeight: 260 }}>
-          {graficasListas && <GraficaTopProductos datos={topProductos(vista, 6)} />}
+          {graficasListas && <GraficaTopProductos datos={topProductos(estado, 6)} />}
         </div>
       </Panel>
 

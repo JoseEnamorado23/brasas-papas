@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { OrigenAsiento } from '../types';
 import { useTienda } from '../store/tienda';
 import { formatoMoneda, totalDebitos } from '../lib/contabilidad';
-import { filtrarPorSede } from '../lib/sedes';
 import { AsientoBloque } from '../components/AsientoBloque';
 import { EstadoVacio, Paginacion, usePaginacion } from '../components/ui';
 
@@ -22,11 +21,10 @@ const FILTROS: { id: Filtro; label: string }[] = [
 const POR_PAGINA = 12;
 
 export function LibroDiario() {
-  const { estado, sedeActual } = useTienda();
-  const vista = useMemo(() => filtrarPorSede(estado, sedeActual), [estado, sedeActual]);
+  const { estado } = useTienda();
   const [filtro, setFiltro] = useState<Filtro>('todos');
 
-  const asientos = vista.asientos
+  const asientos = estado.asientos
     .filter((a) => filtro === 'todos' || a.origen === filtro)
     .slice()
     .reverse();

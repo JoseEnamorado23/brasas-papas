@@ -15,6 +15,7 @@ export const CTA = {
   EQUIPO: 1524,
   PROVEEDORES: 2205,
   DEDUCCIONES_NOMINA: 2370,
+  PROPINAS: 2380,
   IMPUESTO_CONSUMO: 2408,
   CAPITAL: 3115,
   INGRESOS: 4140,
@@ -38,6 +39,7 @@ export const catalogoCuentas: Cuenta[] = [
   { id: CTA.EQUIPO, nombre: 'Equipo de cocina', tipo: 'Activo' },
   { id: CTA.PROVEEDORES, nombre: 'Proveedores nacionales', tipo: 'Pasivo' },
   { id: CTA.DEDUCCIONES_NOMINA, nombre: 'Deducciones de nómina por pagar', tipo: 'Pasivo' },
+  { id: CTA.PROPINAS, nombre: 'Propinas por pagar a empleados', tipo: 'Pasivo' },
   { id: CTA.IMPUESTO_CONSUMO, nombre: 'Impuesto al consumo por pagar', tipo: 'Pasivo' },
   { id: CTA.CAPITAL, nombre: 'Capital social', tipo: 'Patrimonio' },
   { id: CTA.INGRESOS, nombre: 'Ingresos por ventas', tipo: 'Ingreso' },
@@ -70,5 +72,8 @@ export const CATEGORIAS_GASTO: CategoriaGasto[] = [
   'Otros',
 ];
 
-export const cuentaCaja = (forma: 'Efectivo' | 'Transferencia'): number =>
-  forma === 'Efectivo' ? CTA.CAJA : CTA.BANCOS;
+/** Efectivo entra a caja; Nequi, Daviplata, Bre-B, tarjeta y transferencias, a bancos. */
+export const cuentaCaja = (medio: string): number => (medio === 'Efectivo' ? CTA.CAJA : CTA.BANCOS);
+
+/** Propina sugerida en servicio a la mesa. Es voluntaria: el cliente puede quitarla. */
+export const PROPINA_SUGERIDA = 0.1;

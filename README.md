@@ -1,6 +1,6 @@
-# Brasa & Papas — Gestión y contabilidad
+# Don Chorizo — Gestión y contabilidad
 
-Sistema de gestión para un restaurante de comida rápida con un **motor contable
+Sistema de gestión para un restaurante de comida rápida costeña (Montería) con un **motor contable
 de partida doble** que corre en segundo plano. No hay backend ni base de datos:
 todo vive en el estado de React (`useReducer` + Context) y parte de un set de
 datos precargado con ~2 semanas de operación para hacer una demostración.
@@ -29,18 +29,23 @@ Sitio estático de Vite. Framework preset **Vite**, build `npm run build`, outpu
 
 ## Módulos
 
-| Vista | Qué hace |
-| --- | --- |
-| **Punto de venta** | Carta con emoji por producto, filtro por categoría y buscador. Combos prearmados que muestran lo que incluyen y el ahorro frente a comprar suelto. Carrito con impuesto al consumo 8% y forma de pago. Cada venta genera un asiento compuesto (caja, ingreso, impuesto por pagar, costo de ventas, salida de inventario). |
-| **Ventas** | Historial operativo paginado con canal (mostrador / domicilio); cada fila se expande al detalle de productos y al asiento vinculado. |
-| **Reservas** | Agenda por fecha con estados (pendiente → confirmada → sentada → cumplida, más no-show y cancelada). Al **sentar** una reserva se le asigna una mesa libre y se abre su cuenta. Panel de próximas reservas y KPIs del día (comensales esperados, confirmadas, caídas). |
-| **Ocupación de mesas** | Modelo 3D interactivo del salón con Three.js: órbita con el mouse, mesas coloreadas por estado (libre / ocupada / reservada / por limpiar) y click para seleccionarlas. La mesa seleccionada se gestiona en un panel lateral: abrir walk-in, sentar la reserva, cargar consumo (con impuesto al consumo 8%), cerrar la cuenta y marcar la mesa como limpia. Tablero por zona y sesiones cerradas del día con duración y consumo. Es una capa operativa: **no genera asientos** (el cobro se registra en el punto de venta). |
-| **Domicilios** | Pedidos con canal propio o por plataforma (Rappi, Didi Food). Valor de envío por zona, asignación de domiciliario, tablero por estado (recibido → en preparación → en camino → entregado) y liquidación de plataformas. Al entregar se genera la venta y el asiento compuesto; los pedidos por plataforma registran la comisión y quedan como cuenta por cobrar hasta la liquidación. |
-| **Compras y gastos** | Formularios para compras a proveedor (inventario o gasto; contado, transferencia o crédito) y gastos operativos por categoría. |
-| **Empleados y nómina** | Alta de empleados y corrida de nómina quincenal: devengado, deducciones de salud y pensión (8%) y neto. Genera el asiento de nómina. |
-| **Libro diario** | Todos los asientos con filtro por origen, paginación y verificación de partida doble. |
-| **Libro mayor** | Balance de comprobación (sumas y saldos) y detalle de movimientos por cuenta con saldo corriente. |
-| **Dashboard** | KPIs (ticket promedio, margen bruto, impuestos por pagar…), gráficas (ventas por día, ingresos vs. gastos, gastos por categoría, productos más vendidos) y estados financieros. |
+Un solo local en Montería (el modelo conserva `sedeId`, así que una segunda sede no exige migrar datos).
+
+| Grupo | Vista | Qué hace |
+| --- | --- | --- |
+| Operación | **Salón y mesas** | Plano 2D del salón (con opción de vista 3D) y estado por mesa. Abrir walk-in, sentar reservas, ver rondas y estado de cocina, cobrar y marcar limpia. |
+| Operación | **Toma de pedidos** | Pantalla del mesero pensada para celular: plano 2D de mesas, carta táctil, notas por plato ("sin cebolla", "mitad y mitad"), rondas enviadas a cocina, anulaciones con motivo, precuenta y cobro. El mismo flujo sirve para **digitar comandas de papel** en caja (quedan marcadas como "papel"). |
+| Operación | **Cocina (KDS)** | Pantalla de cocina: comandas de mesa, mostrador y domicilio en una fila, filtradas por estación (horno, cocina, barra). Semáforo por tiempo estándar, toque por plato (pendiente → preparando → listo), "bump" por estación, sincronización de tiempos ("iniciar en N min"), anulados en rojo, métricas de preparación y pase con tiquete de despacho impreso (modelo híbrido). |
+| Operación | **Mostrador** | Venta para llevar: se cobra y el pedido sale a cocina. |
+| Operación | **Domicilios / Reservas** | Pedidos propios o por plataforma (zonas de Montería); "pasar a cocina" crea la comanda en el KDS y al entregar se emite el tiquete POS. |
+| Caja | **Facturación** | Soporta los dos documentos electrónicos: **tiquete POS** (consumidor final) y **factura electrónica** (con NIT/cédula y correo). Numeración por resolución, código CUDE/CUFE y QR de consulta. **Simulado**: no se transmite a la DIAN. |
+| Caja | **Ventas** | Historial con canal (mesa, mostrador, domicilio) y asiento vinculado. |
+| Administración | **Dashboard, Carta y agotados, Compras y gastos, Empleados** | Indicadores y estados financieros; marcar productos agotados (dejan de poderse vender); compras, gastos y nómina. |
+| Contabilidad | **Libro diario / mayor** | Asientos de partida doble y balance de comprobación. |
+
+### Cobro
+
+El cobro (mesa o mostrador) elige documento POS o FE, aplica la **propina voluntaria** (sugerida 10% en mesa) y admite **pago mixto** con efectivo, Nequi, Daviplata, Bre-B o tarjeta. Cada cobro genera venta, documento electrónico y asiento: efectivo a caja, los demás medios a bancos, y la propina como pasivo con los empleados (cuenta 2380), no como ingreso.
 
 ## Arquitectura del código
 
@@ -48,6 +53,9 @@ Sitio estático de Vite. Framework preset **Vite**, build `npm run build`, outpu
 | --- | --- |
 | `src/data/cuentas.ts` | Plan de cuentas, tasas de impuesto y deducción, mapeos de categoría a cuenta |
 | `src/data/menu.ts` · `personal.ts` | Carta y plantilla inicial |
+| `src/data/facturacion.ts` | Emisor, resoluciones POS/FE simuladas y medios de pago |
+| `src/lib/comandas.ts` | Comandas: creación (combos repartidos por estación), anulaciones, estados de cocina, semáforo y sincronización de tiempos |
+| `src/lib/facturacion.ts` | Emisión del documento electrónico, código único simulado y URL del QR |
 | `src/data/salon.ts` | Distribución inicial de mesas (zonas y coordenadas para el 3D) y colores por estado |
 | `src/data/seed.ts` | `construirEstadoInicial()` — arma la demo aplicando los mismos `aplicar*` que el reducer |
 | `src/lib/operaciones.ts` | Traduce cada evento operativo (venta, compra, gasto, nómina) en su asiento de partida doble |
